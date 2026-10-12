@@ -1,82 +1,59 @@
-
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#include <iostream>
-
-namespace
-{
-    constexpr int WINDOW_WIDTH = 1280;
-    constexpr int WINDOW_HEIGHT = 720;
-
-    constexpr float PIXEL_X = 640.0f;
-    constexpr float PIXEL_Y = 360.0f;
-}
-
 int main(int argc, char* argv[])
 {
-    if (!SDL_Init(SDL_INIT_VIDEO))
-    {
-        std::cerr << "SDL initialization failed: "
-            << SDL_GetError() << '\n';
-        return 1;
-    }
+    bool quit = false;
+    SDL_Window* window = SDL_CreateWindow("Triangle Example", 800, 600, 0);
 
-    SDL_Window* window = SDL_CreateWindow(
-        "SDL Pixel",
-        WINDOW_WIDTH,
-        WINDOW_HEIGHT,
-        0
-    );
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, NULL);
 
-    if (window == nullptr)
-    {
-        std::cerr << "Window creation failed: "
-            << SDL_GetError() << '\n';
-        SDL_Quit();
-        return 1;
-    }
+#define vertLen 3
+    SDL_Vertex vert[vertLen];
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    // center
+    vert[0].position.x = 400;
+    vert[0].position.y = 150;
+    vert[0].color.r = 1.0;
+    vert[0].color.g = 0.0;
+    vert[0].color.b = 0.0;
+    vert[0].color.a = 1.0;
 
-    if (renderer == nullptr)
-    {
-        std::cerr << "Renderer creation failed: "
-            << SDL_GetError() << '\n';
+    // left
+    vert[1].position.x = 200;
+    vert[1].position.y = 450;
+    vert[1].color.r = 0.0;
+    vert[1].color.g = 0.0;
+    vert[1].color.b = 1.0;
+    vert[1].color.a = 1.0;
 
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
+    // right
+    vert[2].position.x = 600;
+    vert[2].position.y = 450;
+    vert[2].color.r = 0.0;
+    vert[2].color.g = 1.0;
+    vert[2].color.b = 0.0;
+    vert[2].color.a = 1.0;
 
-    bool isRunning = true;
-    SDL_Event event{};
-
-    while (isRunning)
-    {
-        while (SDL_PollEvent(&event))
-        {
-            if (event.type == SDL_EVENT_QUIT)
-            {
-                isRunning = false;
+    while (!quit) {
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev) != 0) {
+            switch (ev.type) {
+            case SDL_EVENT_QUIT:
+                quit = true;
+                break;
             }
         }
-
-        // Clear the window with a black background.
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
-        // Draw one red pixel.
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_RenderPoint(renderer, PIXEL_X, PIXEL_Y);
+        SDL_RenderGeometry(renderer, NULL, vert, vertLen, NULL, 0);
 
-        // Display the rendered frame.
         SDL_RenderPresent(renderer);
     }
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-
     return 0;
 }
