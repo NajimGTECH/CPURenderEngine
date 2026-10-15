@@ -82,17 +82,17 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
             // Inside if all three weights are non negative
             if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
             {
-                // Calculate normalized barycentric weights.
+                // Calculate normalized barycentric weights
                 const float weightA = edgeA / area;
                 const float weightB = edgeB / area;
                 const float weightC = edgeC / area;
 
-                // Interpolate the RGB channels.
+                // Interpolate the RGB channels
                 const float red = weightA * pA.color.r + weightB * pB.color.r + weightC * pC.color.r;
                 const float green = weightA * pA.color.g + weightB * pB.color.g + weightC * pC.color.g;
                 const float blue = weightA * pA.color.b + weightB * pB.color.b + weightC * pC.color.b;
 
-                // Clamp and round the channels to the valid RGB range.
+                // Clamp and round the channels to the valid RGB range
                 point.color.r = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(red)), 0, 255));
                 point.color.g = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(green)), 0, 255));
                 point.color.b = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(blue)), 0, 255));
