@@ -29,14 +29,10 @@ void add_pixel_to_buffer(Pixel px)
 }
 
 // =============
-// Renderer custom functions
+// Chapters
 
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
+void chapter_1()
 {
-    //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_RenderClear(renderer);
-
-    // Drawing stuff...
     for (int y = 0; y < HEIGHT; y++)
     {
         for (int x = 0; x < WIDTH; x++)
@@ -45,6 +41,23 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
             add_pixel_to_buffer(pixel);
         }
     }
+}
+
+void chapter_3()
+{
+
+}
+
+// =============
+// Renderer custom functions
+
+void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
+{
+    //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    SDL_RenderClear(renderer);
+
+    // Drawing stuff...
+    chapter_3();
 
     SDL_UpdateTexture(texture, 0, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, 0, 0);
