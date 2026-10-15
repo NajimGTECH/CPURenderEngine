@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <iostream>
+#include <algorithm>
 
 // ==============
 // SDL Exercices
@@ -43,9 +44,52 @@ void chapter_1()
     }
 }
 
-void chapter_3()
+// The edge function: the 2D cross product of (B - A) and (P - A).
+// Sign = which side of edge A->B the point P is on.
+// Magnitude = twice the signed area of triangle (A, B, P).
+// All integer math. 
+float chapter_3_edge(const Pixel& a, const Pixel& b, const Pixel& p)
 {
+    return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
 
+void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
+{
+    float area = chapter_3_edge(pA, pB, pC);
+    if (area == 0.f) return;
+    if (area < 0.f) 
+    {
+        std::swap(pB.x, pC.x);
+        std::swap(pB.y, pC.y);
+        std::swap(pB.color, pC.color);
+        area = -area;
+    }
+
+    const float min_x = std::max(0, std::min(pA.x, pB.x, pC.x));
+    const float min_y = std::max(0, std::min(pA.y, pB.y, pC.y));
+    const float max_x = std::min(WIDTH - 1, std::max(pA.x, pB.x, pC.x));
+    const float max_y = std::min(HEIGHT - 1, std::max(pA.y, pB.y, pC.y));
+
+    for (int y = min_y; y < max_y; y++)
+    {
+        for (int x = min_x; x < max_x; x++)
+        {
+            Pixel point{ x, y };
+            float edgeA = chapter_3_edge(pB, pC, point);
+            float edgeB = chapter_3_edge(pC, pA, point);
+            float edgeC= chapter_3_edge(pA, pB, point);
+
+            // Inside if all three weights are non negative
+            if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
+            {
+                point.color.r = (edgeA * pA.color.r + edgeB * pB.color.r + edgeC * pC.color.r);
+                point.color.g = (edgeA * pA.color.g + edgeB * pB.color.g + edgeC * pC.color.g);
+                point.color.b = (edgeA * pA.color.b + edgeB * pB.color.b + edgeC * pC.color.b);
+
+                add_pixel_to_buffer(point);
+            }
+        }
+    }
 }
 
 // =============
@@ -57,7 +101,10 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
     SDL_RenderClear(renderer);
 
     // Drawing stuff...
-    chapter_3();
+    Pixel pA{ 100, 300, Color3{255, 0, 0} };
+    Pixel pB{ 200, 100, Color3{0, 255, 0} };
+    Pixel pC{ 300, 300, Color3{0, 0, 255} };
+    chapter_3(pA, pB, pC);
 
     SDL_UpdateTexture(texture, 0, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, 0, 0);

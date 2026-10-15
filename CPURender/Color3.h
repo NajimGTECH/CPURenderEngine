@@ -18,9 +18,9 @@ struct Color3
 
 	uint32_t toRGB() 
 	{ 
-		return ((uint32_t)a << 24)
-			| ((uint32_t)r << 16)
-			| ((uint32_t)g << 8)
-			| (uint32_t)b;
+		return (static_cast<uint32_t>(a) << 24)
+			| (static_cast<uint32_t>(r) << 16)
+			| (static_cast<uint32_t>(g) << 8)
+			| static_cast<uint32_t>(b);
 	};
 };
