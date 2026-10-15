@@ -139,6 +139,7 @@
     <ClCompile Include="Pixel.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Color3.h" />
     <ClInclude Include="Pixel.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
