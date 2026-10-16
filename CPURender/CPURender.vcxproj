@@ -142,7 +142,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Color3.h" />
+    <ClInclude Include="Mat4.h" />
     <ClInclude Include="Pixel.h" />
+    <ClInclude Include="Vec3.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Mat4.inl" />
+    <None Include="Vec3.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

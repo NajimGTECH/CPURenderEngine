@@ -33,15 +33,57 @@ void add_pixel_to_buffer(Pixel px)
 // =============
 // Math classes
 
+#pragma region Chap4 maths (deprecated)
 struct Vec3
 {
     float x, y, z = 1.0f;
+
+    float magnitude()
+    {
+        return std::sqrt(std::powf(x, 2.0f) + std::powf(y, 2.0f) + std::powf(z, 2.0f));
+    }
+
+    Vec3 normalized()
+    {
+        auto magnitude = this->magnitude();
+        if (magnitude == 0.f) return;
+
+        return { x / magnitude, y / magnitude, z / magnitude };
+    }
 };
+
+Vec3 add_vectors(const Vec3& vecA, const Vec3& vecB)
+{
+    return Vec3{ vecA.x + vecB.x, vecA.y + vecB.y, vecA.z + vecB.z };
+}
+
+Vec3 sub_vectors(const Vec3& vecA, const Vec3& vecB)
+{
+    return Vec3{ vecA.x - vecB.x, vecA.y - vecB.y, vecA.z - vecB.z };
+}
+
+Vec3 scale_vectors(float s, const Vec3& vec)
+{
+    return Vec3{ s * vec.x, s * vec.y, s * vec.z };
+}
+
+float dot_product(const Vec3& vecA, const Vec3& vecB)
+{
+    return vecA.x * vecB.x + vecA.y * vecB.y + vecA.z * vecB.z;
+}
+
+Vec3 cross_product(const Vec3& vecA, const Vec3& vecB)
+{
+    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y, 
+        vecA.z * vecB.x - vecA.x * vecB.z, 
+        vecA.x * vecB.y - vecA.y * vecB.x };
+}
 
 struct Mat4
 {
     float m[4][4]{};
 };
+#pragma endregion
 
 // =============
 // Chapters
