@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 // ==============
 // SDL Exercices
@@ -28,6 +29,19 @@ void add_pixel_to_buffer(Pixel px)
 
     frameBuffer[px.y * WIDTH + px.x] = px.color.toRGB();
 }
+
+// =============
+// Math classes
+
+struct Vec3
+{
+    float x, y, z = 1.0f;
+};
+
+struct Mat4
+{
+    float m[4][4]{};
+};
 
 // =============
 // Chapters
@@ -103,6 +117,11 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
     }
 }
 
+void chapter_4()
+{
+
+}
+
 // =============
 // Renderer custom functions
 
@@ -112,10 +131,11 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
     SDL_RenderClear(renderer);
 
     // Drawing stuff...
-    Pixel pA{ 100, 300, Color3{255, 0, 0} };
+    /*Pixel pA{100, 300, Color3{255, 0, 0}};
     Pixel pB{ 200, 100, Color3{0, 255, 0} };
     Pixel pC{ 300, 300, Color3{0, 0, 255} };
-    chapter_3(pA, pB, pC);
+    chapter_3(pA, pB, pC);*/
+    chapter_4();
 
     SDL_UpdateTexture(texture, 0, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, 0, 0);
