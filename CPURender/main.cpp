@@ -326,8 +326,8 @@ int main()
         // Draw the reference circle.
         chapter_4_draw_circle(
             Pixel{
-                WIDTH * 0.5f,
-                HEIGHT * 0.5f,
+                static_cast<int>(WIDTH * 0.5f),
+                static_cast<int>(HEIGHT * 0.5f),
                 Color3{ 60, 60, 80, 255 }
             },
             CIRCLE_RAY
@@ -335,17 +335,17 @@ int main()
 
         // Convert transformed vertices to pixels.
         Pixel pA{
-            transformedA.x, transformedA.y,
+            static_cast<int>(transformedA.x), static_cast<int>(transformedA.y),
             Color3{ 255, 0, 0, 255 }
         };
 
         Pixel pB{
-            transformedB.x, transformedB.y,
+            static_cast<int>(transformedB.x), static_cast<int>(transformedB.y),
             Color3{ 0, 255, 0, 255 }
         };
 
         Pixel pC{
-            transformedC.x, transformedC.y,
+            static_cast<int>(transformedC.x), static_cast<int>(transformedC.y),
             Color3{ 0, 0, 255, 255 }
         };
 

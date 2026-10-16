@@ -2,8 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include "Vec3.h"
-
-class Quaternion;
+#include "Quaternion.h"
 
 namespace math
 {
