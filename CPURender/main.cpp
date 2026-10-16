@@ -1,65 +1,34 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_render.h>
 
 #include "Pixel.h"
 #include "Vec3.h"
 #include "Mat4.h"
 
-#include <cstdlib>
+#include <stdlib.h>
 #include <iostream>
 #include <algorithm>
 #include <cmath>
 
-// Window dimensions
-constexpr int WIDTH = 800;
-constexpr int HEIGHT = 600;
+// ==============
+// SDL Exercices
+// ==============
 
-// Framebuffer
-uint32_t frameBuffer[WIDTH * HEIGHT];
+// =============
+// Screen
 
 constexpr uint16_t WIDTH = 800;
 constexpr uint16_t HEIGHT = 600;
 constexpr int CIRCLE_RAY = 200;
 
-// Cube rotation speed
-constexpr float ROTATION_SPEED = 0.1f;
+// =============
+// Buffer
 
-// 2D projected point
-struct Vector2
+uint32_t frameBuffer[WIDTH * HEIGHT];
+
+void add_pixel_to_buffer(Pixel px)
 {
-    int x;
-    int y;
-};
-
-// Cube vertices in 3D world space
-const Vector3 vertices[8] =
-{
-    { -1.0f, -1.0f, 4.0f },
-    {  1.0f, -1.0f, 4.0f },
-    {  1.0f,  1.0f, 4.0f },
-    { -1.0f,  1.0f, 4.0f },
-
-    { -1.0f, -1.0f, 6.0f },
-    {  1.0f, -1.0f, 6.0f },
-    {  1.0f,  1.0f, 6.0f },
-    { -1.0f,  1.0f, 6.0f }
-};
-
-// Cube edges defined by pairs of vertex indices
-const int edges[12][2] =
-{
-    { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
-    { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
-    { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
-};
-
-// Add a pixel to the framebuffer
-void add_pixel_to_buffer(const Pixel& px)
-{
-    if (px.x < 0 || px.x >= WIDTH ||
-        px.y < 0 || px.y >= HEIGHT)
-    {
-        return;
-    }
+    if (px.x < 0 || px.x >= WIDTH || px.y < 0 || px.y >= HEIGHT) { SDL_Log("Pixel out of screen"); return; }
 
     frameBuffer[px.y * WIDTH + px.x] = px.color.toRGB();
 }
@@ -108,8 +77,8 @@ float dot_product(const Vec3& vecA, const Vec3& vecB)
 
 Vec3 cross_product(const Vec3& vecA, const Vec3& vecB)
 {
-    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y, 
-        vecA.z * vecB.x - vecA.x * vecB.z, 
+    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y,
+        vecA.z * vecB.x - vecA.x * vecB.z,
         vecA.x * vecB.y - vecA.y * vecB.x };
 }
 
@@ -122,195 +91,17 @@ struct Mat4
 // =============
 // Chapters
 
-    const int dx = std::abs(end.x - start.x);
-    const int dy = std::abs(end.y - start.y);
-
-    const int stepX = (start.x < end.x) ? 1 : -1;
-    const int stepY = (start.y < end.y) ? 1 : -1;
-
-    int error = dx - dy;
-
-    while (true)
-    {
-        add_pixel_to_buffer(Pixel(x, y, start.color));
-
-        if (x == end.x && y == end.y)
-        {
-            break;
-        }
-
-        const int doubleError = 2 * error;
-
-        if (doubleError > -dy)
-        {
-            error -= dy;
-            x += stepX;
-        }
-
-        if (doubleError < dx)
-        {
-            error += dx;
-            y += stepY;
-        }
-    }
-}
-
-// Project a 3D camera-space point onto the 2D screen
-Vector2 ProjectPoint(const Vector3& point, float focalLength)
-{
-    // Ignore points behind or too close to the camera
-    if (point.z <= 0.001f)
-    {
-        return { -1, -1 };
-    }
-
-    const float screenX =
-        WIDTH / 2.0f + focalLength * point.x / point.z;
-
-    const float screenY =
-        HEIGHT / 2.0f - focalLength * point.y / point.z;
-
-    return
-    {
-        static_cast<int>(screenX),
-        static_cast<int>(screenY)
-    };
-}
-
-Vector3 RotatePoint(const Vector3& point, float yaw, float pitch)
-{
-
-    const float cosYaw = std::cos(yaw);
-    const float sinYaw = std::sin(yaw);
-
-    const float rotatedX = cosYaw * point.x + sinYaw * point.z;
-    const float rotatedZ = -sinYaw * point.x + cosYaw * point.z;
-
- 
-    const float cosPitch = std::cos(pitch);
-    const float sinPitch = std::sin(pitch);
-
-    const float rotatedY = cosPitch * point.y - sinPitch * rotatedZ;
-    const float finalZ = sinPitch * point.y + cosPitch * rotatedZ;
-
-    return { rotatedX, rotatedY, finalZ };
-}
-
-// Chapter 1: Color gradient
 void chapter_1()
 {
-    for (int y = 0; y < HEIGHT; ++y)
+    for (int y = 0; y < HEIGHT; y++)
     {
-        for (int x = 0; x < WIDTH; ++x)
+        for (int x = 0; x < WIDTH; x++)
         {
-            const float red = static_cast<float>(x) / WIDTH;
-            const float green = static_cast<float>(y) / HEIGHT;
-
-            const uint8_t r = static_cast<uint8_t>(red * 255);
-            const uint8_t g = static_cast<uint8_t>(green * 255);
-            const uint8_t b = 100;
-
-            frameBuffer[y * WIDTH + x] =
-                (static_cast<uint32_t>(r) << 16) |
-                (static_cast<uint32_t>(g) << 8) |
-                static_cast<uint32_t>(b);
+            Pixel pixel(x, y, Color3{ static_cast<uint8_t>(x * 255 / WIDTH), 64, static_cast<uint8_t>(y * 255 / WIDTH) });
+            add_pixel_to_buffer(pixel);
         }
     }
 }
-
-// Chapter 2: Radial starburst
-void chapter_2()
-{
-    const float centerX = WIDTH / 2.0f;
-    const float centerY = HEIGHT / 2.0f;
-    const int rayCount = 36;
-    const float maxRadius = static_cast<float>(
-        std::sqrt(WIDTH * WIDTH + HEIGHT * HEIGHT));
-
-    // Clear the framebuffer
-    std::fill(
-        std::begin(frameBuffer),
-        std::end(frameBuffer),
-        0x101018
-    );
-
-    for (int i = 0; i < rayCount; ++i)
-    {
-        const float angle =
-            2.0f * std::numbers::pi_v<float> *i / rayCount;
-
-        const int endX = static_cast<int>(
-            centerX + std::cos(angle) * maxRadius);
-
-        const int endY = static_cast<int>(
-            centerY + std::sin(angle) * maxRadius);
-
-        const Pixel start(
-            static_cast<int>(centerX),
-            static_cast<int>(centerY),
-            Color3(255, 255, 255)
-        );
-
-        const Pixel end(
-            endX,
-            endY,
-            Color3(80, 180, 255)
-        );
-
-        add_line_to_buffer(start, end);
-    }
-}
-
-// Chapter 5: 3D wireframe cube projection
-void chapter_5()
-{
-    // Clear the framebuffer with a dark background
-    std::fill(
-        std::begin(frameBuffer),
-        std::end(frameBuffer),
-        0x101018
-    );
-
-    // Field of view in degrees
-    constexpr float FOV_DEGREES = 70.0f;
-
-    const float fovRadians =
-        FOV_DEGREES * std::numbers::pi_v<float> / 180.0f;
-
-    const float focalLength =
-        (HEIGHT / 2.0f) / std::tan(fovRadians / 2.0f);
-
-    // Transform and project all cube vertices
-    Vector2 projectedVertices[8];
-
-    for (int i = 0; i < 8; ++i)
-    {
-        const Vector3 localPoint =
-        {
-            vertices[i].x,
-            vertices[i].y,
-            vertices[i].z - 5.0f
-        };
-
-        
-        const Vector3 rotatedPoint =
-            RotatePoint(localPoint, cubeYaw, cubePitch);
-
-        
-        const Vector3 worldPoint =
-        {
-            rotatedPoint.x,
-            rotatedPoint.y,
-            rotatedPoint.z + 5.0f
-        };
-
-       
-        const Vector3 cameraPoint =
-            WorldToCamera(worldPoint, camera);
-
-        projectedVertices[i] =
-            ProjectPoint(cameraPoint, focalLength);
-    }
 
 void chapter_4_draw_circle(const Pixel& center, int ray)
 {
@@ -359,7 +150,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
 {
     float area = chapter_3_edge(pA, pB, pC);
     if (area == 0.f) return;
-    if (area < 0.f) 
+    if (area < 0.f)
     {
         std::swap(pB.x, pC.x);
         std::swap(pB.y, pC.y);
@@ -379,7 +170,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
             Pixel point{ x, y };
             float edgeA = chapter_3_edge(pB, pC, point);
             float edgeB = chapter_3_edge(pC, pA, point);
-            float edgeC= chapter_3_edge(pA, pB, point);
+            float edgeC = chapter_3_edge(pA, pB, point);
 
             // Inside if all three weights are non negative
             if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
@@ -405,88 +196,49 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
     }
 }
 
-        const Pixel startPixel(start.x, start.y, edgeColor);
-        const Pixel endPixel(end.x, end.y, edgeColor);
+// =============
+// Renderer custom functions
 
-        add_line_to_buffer(startPixel, endPixel);
-    }
-}
-
-// Update and display the framebuffer
 void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
 {
-    chapter_5();
+    //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    SDL_RenderClear(renderer);
 
     // Drawing stuff...
-    Pixel pA{WIDTH / 2, HEIGHT / 2 - CIRCLE_RAY, Color3{255, 0, 0}};
+    Pixel pA{ WIDTH / 2, HEIGHT / 2 - CIRCLE_RAY, Color3{255, 0, 0} };
     Pixel pB{ WIDTH / 2 - CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 255, 0} };
     Pixel pC{ WIDTH / 2 + CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 0, 255} };
     chapter_3(pA, pB, pC);
 
     chapter_4_draw_circle(Pixel{ static_cast<int>(WIDTH / 2), static_cast<int>(HEIGHT / 2), Color3{255, 255, 255} }, CIRCLE_RAY);
 
-    SDL_RenderClear(renderer);
-    SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+    SDL_UpdateTexture(texture, 0, frameBuffer, WIDTH * sizeof(uint32_t));
+    SDL_RenderTexture(renderer, texture, 0, 0);
     SDL_RenderPresent(renderer);
 }
 
-int main(int argc, char* argv[])
+// =============
+// Main function
+
+int main()
 {
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    // Init
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
-        std::cerr << "SDL initialization failed: "
-            << SDL_GetError() << '\n';
+        SDL_Log("Couldn't init SDL\n");
         return EXIT_FAILURE;
     }
 
-    SDL_Window* window = SDL_CreateWindow(
-        "Chapter 5 - Projection",
-        WIDTH,
-        HEIGHT,
-        0
-    );
-
-    if (window == nullptr)
-    {
-        std::cerr << "Window creation failed: "
-            << SDL_GetError() << '\n';
-
-        SDL_Quit();
-        return EXIT_FAILURE;
-    }
+    SDL_Window* window = SDL_CreateWindow("Fenetre Test", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr) { SDL_Log("Window could not be created.\n"); return EXIT_FAILURE; }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr) { SDL_Log("Renderer could not be created.\n"); return EXIT_FAILURE; }
+    std::cout << "Initialized renderer:\t" << SDL_GetRendererName(renderer) << '\n';
 
-    if (renderer == nullptr)
-    {
-        std::cerr << "Renderer creation failed: "
-            << SDL_GetError() << '\n';
+    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+    if (texture == nullptr) { SDL_Log("Texture could not be created.\n"); return EXIT_FAILURE; }
 
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return EXIT_FAILURE;
-    }
-
-    SDL_Texture* texture = SDL_CreateTexture(
-        renderer,
-        SDL_PIXELFORMAT_ARGB8888,
-        SDL_TEXTUREACCESS_STREAMING,
-        WIDTH,
-        HEIGHT
-    );
-
-    if (texture == nullptr)
-    {
-        std::cerr << "Texture creation failed: "
-            << SDL_GetError() << '\n';
-
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return EXIT_FAILURE;
-    }
-
-    bool isRunning = true;
     SDL_Event event;
 
     // FPS measurement
@@ -512,39 +264,6 @@ int main(int argc, char* argv[])
                 if (event.key.key == SDLK_ESCAPE)
                 {
                     isRunning = false;
-                }
-            }
-            else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-            {
-                if (event.button.button == SDL_BUTTON_LEFT)
-                {
-                    camera.isLooking = true;
-                    SDL_SetWindowRelativeMouseMode(window, true);
-                }
-            }
-            else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
-            {
-                if (event.button.button == SDL_BUTTON_LEFT)
-                {
-                    camera.isLooking = false;
-                    SDL_SetWindowRelativeMouseMode(window, false);
-                }
-            }
-            else if (event.type == SDL_EVENT_MOUSE_MOTION)
-            {
-                if (camera.isLooking)
-                {
-                    camera.yaw +=
-                        event.motion.xrel * MOUSE_SENSITIVITY;
-
-                    camera.pitch -=
-                        event.motion.yrel * MOUSE_SENSITIVITY;
-
-                    camera.pitch = std::clamp(
-                        camera.pitch,
-                        -MAX_PITCH,
-                        MAX_PITCH
-                    );
                 }
             }
         }
@@ -647,13 +366,10 @@ int main(int argc, char* argv[])
         SDL_RenderPresent(renderer);
     }
 
-    SDL_SetWindowRelativeMouseMode(window, false);
-
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
-
     SDL_Quit();
 
-    return EXIT_SUCCESS;
+    return 0;
 }
