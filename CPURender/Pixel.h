@@ -11,6 +11,10 @@ struct Pixel
         x(_x), y(_y), color(_color) 
     {};
 
+    Pixel(int _x, int _y) :
+        x(_x), y(_y), color({0, 0, 0, 255})
+    {};
+
     int x, y = 0;
     Color3 color;
 };
