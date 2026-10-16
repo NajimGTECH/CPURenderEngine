@@ -139,11 +139,13 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Pixel.cpp" />
+    <ClCompile Include="Quaternion.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Color3.h" />
     <ClInclude Include="Mat4.h" />
     <ClInclude Include="Pixel.h" />
+    <ClInclude Include="Quaternion.h" />
     <ClInclude Include="Vec3.h" />
   </ItemGroup>
   <ItemGroup>
