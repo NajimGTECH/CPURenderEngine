@@ -1,375 +1,487 @@
+
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_render.h>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
 
 #include "Pixel.h"
 #include "Vec3.h"
 #include "Mat4.h"
 
-#include <stdlib.h>
-#include <iostream>
-#include <algorithm>
-#include <cmath>
-
-// ==============
-// SDL Exercices
-// ==============
-
-// =============
-// Screen
-
-constexpr uint16_t WIDTH = 800;
-constexpr uint16_t HEIGHT = 600;
-constexpr int CIRCLE_RAY = 200;
-
-// =============
-// Buffer
-
-uint32_t frameBuffer[WIDTH * HEIGHT];
-
-void add_pixel_to_buffer(Pixel px)
+namespace
 {
-    if (px.x < 0 || px.x >= WIDTH || px.y < 0 || px.y >= HEIGHT) { SDL_Log("Pixel out of screen"); return; }
+// Configuration
+    constexpr int WIDTH = 800;
+    constexpr int HEIGHT = 600;
 
-    frameBuffer[px.y * WIDTH + px.x] = px.color.toRGB();
-}
+    constexpr float FIELD_OF_VIEW = 1.0471975512f;
+    constexpr float NEAR_PLANE = 0.1f;
+    constexpr float FAR_PLANE = 100.0f;
+    constexpr float CAMERA_DISTANCE = 5.0f;
 
-// =============
-// Math classes
+    constexpr float ROTATION_SPEED_X = 0.5f;
+    constexpr float ROTATION_SPEED_Y = 0.8f;
+    constexpr float MIN_CLIP_W = 0.0001f;
 
-#pragma region Chap4 maths (deprecated)
-struct Vec3
-{
-    float x, y, z = 1.0f;
+    using Vec3 = math::Vector3<float>;
+    using Mat4 = math::Mat4<float>;
+    using Color = std::uint32_t;
 
-    float magnitude()
+    constexpr Color MakeColor(
+        std::uint8_t red,
+        std::uint8_t green,
+        std::uint8_t blue)
     {
-        return std::sqrt(std::powf(x, 2.0f) + std::powf(y, 2.0f) + std::powf(z, 2.0f));
+        return 0xFF000000u
+            | (static_cast<Color>(red) << 16)
+            | (static_cast<Color>(green) << 8)
+            | static_cast<Color>(blue);
     }
 
-    Vec3 normalized()
-    {
-        auto magnitude = this->magnitude();
-        if (magnitude == 0.f) return *this;
+    constexpr Color BACKGROUND_COLOR = MakeColor(16, 16, 24);
 
-        return { x / magnitude, y / magnitude, z / magnitude };
+    constexpr std::array<Color, 3> AXIS_COLORS =
+    {
+        MakeColor(230, 80, 80),
+        MakeColor(80, 210, 90),
+        MakeColor(90, 140, 240)
+    };
+
+    std::array<Color, WIDTH* HEIGHT> frameBuffer{};
+
+ 
+    // Cube geometry
+   
+
+    constexpr std::array<Vec3, 8> CUBE_VERTICES =
+    { {
+        Vec3(-1.0f, -1.0f, -1.0f),
+        Vec3(1.0f, -1.0f, -1.0f),
+        Vec3(1.0f,  1.0f, -1.0f),
+        Vec3(-1.0f,  1.0f, -1.0f),
+
+        Vec3(-1.0f, -1.0f,  1.0f),
+        Vec3(1.0f, -1.0f,  1.0f),
+        Vec3(1.0f,  1.0f,  1.0f),
+        Vec3(-1.0f,  1.0f,  1.0f)
+    } };
+
+    struct CubeEdge
+    {
+        int start;
+        int end;
+        int axis;
+    };
+
+    constexpr std::array<CubeEdge, 12> CUBE_EDGES =
+    { {
+        { 0, 1, 0 }, { 3, 2, 0 },
+        { 7, 6, 0 }, { 4, 5, 0 },
+
+        { 0, 3, 1 }, { 1, 2, 1 },
+        { 5, 6, 1 }, { 4, 7, 1 },
+
+        { 0, 4, 2 }, { 1, 5, 2 },
+        { 2, 6, 2 }, { 3, 7, 2 }
+    } };
+
+    struct ScreenVertex
+    {
+        int x = 0;
+        int y = 0;
+        bool visible = false;
+    };
+
+    // Framebuffer
+   
+    void ClearFrameBuffer(Color color)
+    {
+        frameBuffer.fill(color);
     }
-};
 
-Vec3 add_vectors(const Vec3& vecA, const Vec3& vecB)
-{
-    return Vec3{ vecA.x + vecB.x, vecA.y + vecB.y, vecA.z + vecB.z };
-}
-
-Vec3 sub_vectors(const Vec3& vecA, const Vec3& vecB)
-{
-    return Vec3{ vecA.x - vecB.x, vecA.y - vecB.y, vecA.z - vecB.z };
-}
-
-Vec3 scale_vectors(float s, const Vec3& vec)
-{
-    return Vec3{ s * vec.x, s * vec.y, s * vec.z };
-}
-
-float dot_product(const Vec3& vecA, const Vec3& vecB)
-{
-    return vecA.x * vecB.x + vecA.y * vecB.y + vecA.z * vecB.z;
-}
-
-Vec3 cross_product(const Vec3& vecA, const Vec3& vecB)
-{
-    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y,
-        vecA.z * vecB.x - vecA.x * vecB.z,
-        vecA.x * vecB.y - vecA.y * vecB.x };
-}
-
-struct Mat4
-{
-    float m[4][4]{};
-};
-#pragma endregion
-
-// =============
-// Chapters
-
-void chapter_1()
-{
-    for (int y = 0; y < HEIGHT; y++)
+    void PutPixel(int x, int y, Color color)
     {
-        for (int x = 0; x < WIDTH; x++)
+        if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT)
         {
-            Pixel pixel(x, y, Color3{ static_cast<uint8_t>(x * 255 / WIDTH), 64, static_cast<uint8_t>(y * 255 / WIDTH) });
-            add_pixel_to_buffer(pixel);
+            return;
         }
-    }
-}
 
-void chapter_4_draw_circle(const Pixel& center, int ray)
-{
-    // Draw circle
-
-    int x = 0;
-    int y = ray;
-    int diameter = 3 - 2 * ray;
-
-    while (x <= y)
-    {
-        add_pixel_to_buffer(Pixel{ center.x + x, center.y + y, center.color });
-        add_pixel_to_buffer(Pixel{ center.x - x, center.y + y, center.color });
-        add_pixel_to_buffer(Pixel{ center.x + x, center.y - y, center.color });
-        add_pixel_to_buffer(Pixel{ center.x - x, center.y - y, center.color });
-
-        add_pixel_to_buffer(Pixel{ center.x + y, center.y + x, center.color });
-        add_pixel_to_buffer(Pixel{ center.x - y, center.y + x, center.color });
-        add_pixel_to_buffer(Pixel{ center.x + y, center.y - x, center.color });
-        add_pixel_to_buffer(Pixel{ center.x - y, center.y - x, center.color });
-
-        x++;
-
-        if (diameter > 0)
-        {
-            y--;
-            diameter += 4 * (x - y) + 10;
-        }
-        else
-        {
-            diameter += 4 * x + 6;
-        }
-    }
-}
-
-// The edge function: the 2D cross product of (B - A) and (P - A).
-// Sign = which side of edge A->B the point P is on.
-// Magnitude = twice the signed area of triangle (A, B, P).
-// All integer math. 
-float chapter_3_edge(const Pixel& a, const Pixel& b, const Pixel& p)
-{
-    return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-}
-
-void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
-{
-    float area = chapter_3_edge(pA, pB, pC);
-    if (area == 0.f) return;
-    if (area < 0.f)
-    {
-        std::swap(pB.x, pC.x);
-        std::swap(pB.y, pC.y);
-        std::swap(pB.color, pC.color);
-        area = -area;
+        frameBuffer[static_cast<std::size_t>(y) * WIDTH + x] = color;
     }
 
-    const float min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const float min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const float max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const float max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+ 
+    // Line rasterization
+  
 
-    for (int y = min_y; y < max_y; y++)
+    void DrawLine(
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        Color color)
     {
-        for (int x = min_x; x < max_x; x++)
-        {
-            Pixel point{ x, y };
-            float edgeA = chapter_3_edge(pB, pC, point);
-            float edgeB = chapter_3_edge(pC, pA, point);
-            float edgeC = chapter_3_edge(pA, pB, point);
+        const int dx = std::abs(x1 - x0);
+        const int dy = std::abs(y1 - y0);
 
-            // Inside if all three weights are non negative
-            if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
+        const int stepX = (x0 < x1) ? 1 : -1;
+        const int stepY = (y0 < y1) ? 1 : -1;
+
+        int error = dx - dy;
+
+        for (;;)
+        {
+            PutPixel(x0, y0, color);
+
+            if (x0 == x1 && y0 == y1)
             {
-                // Calculate normalized barycentric weights
-                const float weightA = edgeA / area;
-                const float weightB = edgeB / area;
-                const float weightC = edgeC / area;
+                break;
+            }
 
-                // Interpolate the RGB channels
-                const float red = weightA * pA.color.r + weightB * pB.color.r + weightC * pC.color.r;
-                const float green = weightA * pA.color.g + weightB * pB.color.g + weightC * pC.color.g;
-                const float blue = weightA * pA.color.b + weightB * pB.color.b + weightC * pC.color.b;
+            const int doubledError = 2 * error;
 
-                // Clamp and round the channels to the valid RGB range
-                point.color.r = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(red)), 0, 255));
-                point.color.g = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(green)), 0, 255));
-                point.color.b = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(blue)), 0, 255));
+            if (doubledError > -dy)
+            {
+                error -= dy;
+                x0 += stepX;
+            }
 
-                add_pixel_to_buffer(point);
+            if (doubledError < dx)
+            {
+                error += dx;
+                y0 += stepY;
             }
         }
     }
+
+    
+    // Rotation matrices
+ 
+
+    Mat4 MakeRotationX(float angle)
+    {
+        const float cosine = std::cos(angle);
+        const float sine = std::sin(angle);
+
+        // Row-vector convention.
+        return Mat4(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, cosine, sine, 0.0f,
+            0.0f, -sine, cosine, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+    Mat4 MakeRotationY(float angle)
+    {
+        const float cosine = std::cos(angle);
+        const float sine = std::sin(angle);
+
+        // Row-vector convention.
+        return Mat4(
+            cosine, 0.0f, sine, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            -sine, 0.0f, cosine, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+    }
+
+ 
+    // Projection
+  
+
+    ScreenVertex ProjectVertex(
+        const Vec3& vertex,
+        const Mat4& mvp)
+    {
+        // Transform the model-space position into clip space.
+        const float clipX =
+            vertex.x * mvp(0, 0)
+            + vertex.y * mvp(1, 0)
+            + vertex.z * mvp(2, 0)
+            + mvp(3, 0);
+
+        const float clipY =
+            vertex.x * mvp(0, 1)
+            + vertex.y * mvp(1, 1)
+            + vertex.z * mvp(2, 1)
+            + mvp(3, 1);
+
+        const float clipW =
+            vertex.x * mvp(0, 3)
+            + vertex.y * mvp(1, 3)
+            + vertex.z * mvp(2, 3)
+            + mvp(3, 3);
+
+        // Avoid dividing by zero or projecting a point behind the camera.
+        if (clipW <= MIN_CLIP_W)
+        {
+            return {};
+        }
+
+        // Perspective divide: clip space to normalized device coordinates.
+        const float ndcX = clipX / clipW;
+        const float ndcY = clipY / clipW;
+
+        // Viewport transform: normalized coordinates to pixel coordinates.
+        const int screenX = static_cast<int>(
+            (ndcX + 1.0f) * 0.5f * WIDTH
+            );
+
+        const int screenY = static_cast<int>(
+            (1.0f - ndcY) * 0.5f * HEIGHT
+            );
+
+        return { screenX, screenY, true };
+    }
+
+  
+    // Cube rendering
+  
+
+    void RenderCube(float elapsedSeconds)
+    {
+        ClearFrameBuffer(BACKGROUND_COLOR);
+
+        // Model: rotate the cube around its local X and Y axes.
+        const Mat4 rotationX =
+            MakeRotationX(elapsedSeconds * ROTATION_SPEED_X);
+
+        const Mat4 rotationY =
+            MakeRotationY(elapsedSeconds * ROTATION_SPEED_Y);
+
+        const Mat4 model = rotationX * rotationY;
+
+        // View: place the camera at (0, 0, 5), looking at the origin.
+        const Mat4 view = Mat4::LookAt(
+            Vec3(0.0f, 0.0f, CAMERA_DISTANCE),
+            Vec3(0.0f, 0.0f, 0.0f),
+            Vec3(0.0f, 1.0f, 0.0f)
+        );
+
+     
+        const float aspectRatio =
+            static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+
+        const Mat4 projection = Mat4::Perspective(
+            FIELD_OF_VIEW,
+            aspectRatio,
+            NEAR_PLANE,
+            FAR_PLANE
+        );
+
+        // Row-vector convention: model, then view, then projection.
+        const Mat4 mvp = model * view * projection;
+
+        // Transform the eight cube vertices only once per frame.
+        std::array<ScreenVertex, 8> screenVertices{};
+
+        for (std::size_t i = 0; i < CUBE_VERTICES.size(); ++i)
+        {
+            screenVertices[i] = ProjectVertex(CUBE_VERTICES[i], mvp);
+        }
+
+        // Draw the twelve edges using the colour associated with each axis.
+        for (const CubeEdge& edge : CUBE_EDGES)
+        {
+            const ScreenVertex& start = screenVertices[edge.start];
+            const ScreenVertex& end = screenVertices[edge.end];
+
+            if (!start.visible || !end.visible)
+            {
+                continue;
+            }
+
+            DrawLine(
+                start.x,
+                start.y,
+                end.x,
+                end.y,
+                AXIS_COLORS[edge.axis]
+            );
+        }
+    }
+
+   
+    // SDL presentation
+  
+
+    bool PresentFrame(SDL_Renderer* renderer, SDL_Texture* texture)
+    {
+        if (!SDL_UpdateTexture(
+            texture,
+            nullptr,
+            frameBuffer.data(),
+            WIDTH * static_cast<int>(sizeof(Color))))
+        {
+            SDL_Log("SDL_UpdateTexture failed: %s", SDL_GetError());
+            return false;
+        }
+
+        if (!SDL_RenderClear(renderer))
+        {
+            SDL_Log("SDL_RenderClear failed: %s", SDL_GetError());
+            return false;
+        }
+
+        if (!SDL_RenderTexture(renderer, texture, nullptr, nullptr))
+        {
+            SDL_Log("SDL_RenderTexture failed: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_RenderPresent(renderer);
+        return true;
+    }
 }
 
-// =============
-// Renderer custom functions
 
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
-{
-    //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_RenderClear(renderer);
+// Main
 
-    // Drawing stuff...
-    Pixel pA{ WIDTH / 2, HEIGHT / 2 - CIRCLE_RAY, Color3{255, 0, 0} };
-    Pixel pB{ WIDTH / 2 - CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 255, 0} };
-    Pixel pC{ WIDTH / 2 + CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 0, 255} };
-    chapter_3(pA, pB, pC);
-
-    chapter_4_draw_circle(Pixel{ static_cast<int>(WIDTH / 2), static_cast<int>(HEIGHT / 2), Color3{255, 255, 255} }, CIRCLE_RAY);
-
-    SDL_UpdateTexture(texture, 0, frameBuffer, WIDTH * sizeof(uint32_t));
-    SDL_RenderTexture(renderer, texture, 0, 0);
-    SDL_RenderPresent(renderer);
-}
-
-// =============
-// Main function
 
 int main()
 {
-    // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
-        SDL_Log("Couldn't init SDL\n");
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return EXIT_FAILURE;
     }
 
-    SDL_Window* window = SDL_CreateWindow("Fenetre Test", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
-    if (window == nullptr) { SDL_Log("Window could not be created.\n"); return EXIT_FAILURE; }
+    SDL_Window* window = SDL_CreateWindow(
+        "Chapter 05 - 3D pipeline",
+        WIDTH,
+        HEIGHT,
+        SDL_WINDOW_RESIZABLE
+    );
+
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-    if (renderer == nullptr) { SDL_Log("Renderer could not be created.\n"); return EXIT_FAILURE; }
-    std::cout << "Initialized renderer:\t" << SDL_GetRendererName(renderer) << '\n';
 
-    SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
-    if (texture == nullptr) { SDL_Log("Texture could not be created.\n"); return EXIT_FAILURE; }
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
-    SDL_Event event;
+    SDL_Texture* texture = SDL_CreateTexture(
+        renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING,
+        WIDTH,
+        HEIGHT
+    );
 
-    // FPS measurement
-    const Uint64 freq = SDL_GetPerformanceFrequency();
-    const Uint64 start = SDL_GetPerformanceCounter();
-    Uint64 last = start;
-    double fps_accum = 0.0;
-    int    fps_count = 0;
-    char   title[160];
+    if (texture == nullptr)
+    {
+        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return EXIT_FAILURE;
+    }
 
-    // Loop
+    std::cout << "Initialized renderer: "
+        << SDL_GetRendererName(renderer) << '\n';
+
+    const Uint64 frequency = SDL_GetPerformanceFrequency();
+    const Uint64 startTime = SDL_GetPerformanceCounter();
+
+    Uint64 lastFrameTime = startTime;
+    double fpsAccumulator = 0.0;
+    int fpsFrameCount = 0;
+
     bool isRunning = true;
+
     while (isRunning)
     {
+        SDL_Event event;
+
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_EVENT_QUIT)
             {
                 isRunning = false;
             }
-            else if (event.type == SDL_EVENT_KEY_DOWN)
+            else if (event.type == SDL_EVENT_KEY_DOWN
+                && event.key.key == SDLK_ESCAPE)
             {
-                if (event.key.key == SDLK_ESCAPE)
-                {
-                    isRunning = false;
-                }
+                isRunning = false;
             }
         }
 
-        // Calculate the rotation angle from elapsed time.
-        const double seconds =
-            static_cast<double>(SDL_GetPerformanceCounter() - start)
-            / static_cast<double>(freq);
+        if (!isRunning)
+        {
+            break;
+        }
 
-        const float angle = static_cast<float>(seconds);
+        const Uint64 currentTime = SDL_GetPerformanceCounter();
 
-        // Define the triangle in local coordinates.
-        const math::Vector3<float> baseA(
-            0.0f, -static_cast<float>(CIRCLE_RAY), 0.0f);
-
-        const float halfBase =
-            static_cast<float>(CIRCLE_RAY) * 0.8660254f;
-
-        const math::Vector3<float> baseB(
-            halfBase, CIRCLE_RAY * 0.5f, 0.0f);
-
-        const math::Vector3<float> baseC(
-            -halfBase, CIRCLE_RAY * 0.5f, 0.0f);
-
-        // Create the Z-axis rotation matrix.
-        const float c = std::cos(angle);
-        const float s = std::sin(angle);
-
-        const math::Mat4<float> rotation(
-            c, s, 0.0f, 0.0f,
-            -s, c, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f
-        );
-
-        // Translate the triangle to the center of the screen.
-        const math::Mat4<float> translation =
-            math::Mat4<float>::Translate(
-                math::Vector3<float>(
-                    WIDTH * 0.5f,
-                    HEIGHT * 0.5f,
-                    0.0f
-                )
+        const float elapsedSeconds = static_cast<float>(
+            static_cast<double>(currentTime - startTime)
+            / static_cast<double>(frequency)
             );
 
-        // Apply rotation first, then translation.
-        const math::Mat4<float> transform = rotation * translation;
+        RenderCube(elapsedSeconds);
 
-        // Transform all three vertices.
-        const auto transformedA = transform.MultiplyPointAffine(baseA);
-        const auto transformedB = transform.MultiplyPointAffine(baseB);
-        const auto transformedC = transform.MultiplyPointAffine(baseC);
+        if (!PresentFrame(renderer, texture))
+        {
+            isRunning = false;
+            break;
+        }
 
-        // Clear the CPU framebuffer.
-        const uint32_t backgroundColor =
-            Color3{ 16, 16, 24, 255 }.toRGB();
+        // Update the FPS counter approximately once per second.
+        const Uint64 frameEndTime = SDL_GetPerformanceCounter();
 
-        std::fill_n(frameBuffer, WIDTH * HEIGHT, backgroundColor);
+        const double deltaTime =
+            static_cast<double>(frameEndTime - lastFrameTime)
+            / static_cast<double>(frequency);
 
-        // Draw the reference circle.
-        chapter_4_draw_circle(
-            Pixel{
-                static_cast<int>(WIDTH * 0.5f),
-                static_cast<int>(HEIGHT * 0.5f),
-                Color3{ 60, 60, 80, 255 }
-            },
-            CIRCLE_RAY
-        );
+        lastFrameTime = frameEndTime;
+        fpsAccumulator += deltaTime;
+        ++fpsFrameCount;
 
-        // Convert transformed vertices to pixels.
-        Pixel pA{
-            static_cast<int>(transformedA.x), static_cast<int>(transformedA.y),
-            Color3{ 255, 0, 0, 255 }
-        };
+        if (fpsAccumulator >= 1.0)
+        {
+            const double fps =
+                static_cast<double>(fpsFrameCount) / fpsAccumulator;
 
-        Pixel pB{
-            static_cast<int>(transformedB.x), static_cast<int>(transformedB.y),
-            Color3{ 0, 255, 0, 255 }
-        };
+            const double millisecondsPerFrame =
+                1000.0 * fpsAccumulator / fpsFrameCount;
 
-        Pixel pC{
-            static_cast<int>(transformedC.x), static_cast<int>(transformedC.y),
-            Color3{ 0, 0, 255, 255 }
-        };
+            char title[160];
 
-        // Rasterize the RGB triangle.
-        chapter_3(pA, pB, pC);
+            std::snprintf(
+                title,
+                sizeof(title),
+                "Chapter 05 - 3D pipeline | %.1f FPS (%.2f ms/frame)",
+                fps,
+                millisecondsPerFrame
+            );
 
-        // Upload the framebuffer and display it.
-        SDL_RenderClear(renderer);
+            SDL_SetWindowTitle(window, title);
 
-        SDL_UpdateTexture(
-            texture,
-            nullptr,
-            frameBuffer,
-            WIDTH * sizeof(uint32_t)
-        );
-
-        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-        SDL_RenderPresent(renderer);
+            fpsAccumulator = 0.0;
+            fpsFrameCount = 0;
+        }
     }
 
+    // Destroy resources in reverse creation order.
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    return 0;
+    return EXIT_SUCCESS;
 }

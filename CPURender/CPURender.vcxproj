@@ -137,13 +137,11 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Pixel.cpp" />
     <ClCompile Include="Quaternion.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Camera.h" />
     <ClInclude Include="Color3.h" />
     <ClInclude Include="Mat4.h" />
     <ClInclude Include="Pixel.h" />
