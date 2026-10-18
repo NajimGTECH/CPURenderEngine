@@ -141,6 +141,7 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="Texture.cpp" />
     <ClCompile Include="Pixel.cpp" />
     <ClCompile Include="Quaternion.cpp" />
   </ItemGroup>
@@ -148,6 +149,7 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClInclude Include="Color3.h" />
     <ClInclude Include="Mat4.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Texture.h" />
     <ClInclude Include="Pixel.h" />
     <ClInclude Include="Quaternion.h" />
     <ClInclude Include="Vec3.h" />
