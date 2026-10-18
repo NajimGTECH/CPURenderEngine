@@ -4,11 +4,15 @@
 #include "Pixel.h"
 #include "Vec3.h"
 #include "Mat4.h"
+#include "Mesh.h"
 
 #include <stdlib.h>
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <vector>
+#include <limits>
+#include <numbers>
 
 // ==============
 // SDL Exercices
@@ -196,6 +200,195 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
     }
 }
 
+// Rotating RGB triangle inside its reference circle.
+void chapter_4(float seconds)
+{
+    const float angle = seconds;
+
+    // Define the triangle in local coordinates.
+    const math::Vector3<float> baseA(
+        0.0f, -static_cast<float>(CIRCLE_RAY), 0.0f);
+
+    const float halfBase =
+        static_cast<float>(CIRCLE_RAY) * 0.8660254f;
+
+    const math::Vector3<float> baseB(
+        halfBase, CIRCLE_RAY * 0.5f, 0.0f);
+
+    const math::Vector3<float> baseC(
+        -halfBase, CIRCLE_RAY * 0.5f, 0.0f);
+
+    // Create the Z-axis rotation matrix.
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+
+    const math::Mat4<float> rotation(
+        c, s, 0.0f, 0.0f,
+        -s, c, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    );
+
+    // Translate the triangle to the center of the screen.
+    const math::Mat4<float> translation =
+        math::Mat4<float>::Translate(
+            math::Vector3<float>(
+                WIDTH * 0.5f,
+                HEIGHT * 0.5f,
+                0.0f
+            )
+        );
+
+    // Apply rotation first, then translation.
+    const math::Mat4<float> transform = rotation * translation;
+
+    // Transform all three vertices.
+    const auto transformedA = transform.MultiplyPointAffine(baseA);
+    const auto transformedB = transform.MultiplyPointAffine(baseB);
+    const auto transformedC = transform.MultiplyPointAffine(baseC);
+
+    // Draw the reference circle.
+    chapter_4_draw_circle(
+        Pixel{
+            static_cast<int>(WIDTH * 0.5f),
+            static_cast<int>(HEIGHT * 0.5f),
+            Color3{ 60, 60, 80, 255 }
+        },
+        CIRCLE_RAY
+    );
+
+    // Convert transformed vertices to pixels.
+    Pixel pA{
+        static_cast<int>(transformedA.x), static_cast<int>(transformedA.y),
+        Color3{ 255, 0, 0, 255 }
+    };
+
+    Pixel pB{
+        static_cast<int>(transformedB.x), static_cast<int>(transformedB.y),
+        Color3{ 0, 255, 0, 255 }
+    };
+
+    Pixel pC{
+        static_cast<int>(transformedC.x), static_cast<int>(transformedC.y),
+        Color3{ 0, 0, 255, 255 }
+    };
+
+    // Rasterize the RGB triangle.
+    chapter_3(pA, pB, pC);
+}
+
+// Bresenham line: integer-only walk from one pixel to the other.
+// "error" tracks how far the ideal line is from the pixel we're on,
+// and tells us when to step in x, in y, or in both.
+void chapter_6_draw_line(const Pixel& from, const Pixel& to)
+{
+    int x = from.x;
+    int y = from.y;
+
+    const int dx = std::abs(to.x - from.x);
+    const int dy = -std::abs(to.y - from.y);
+    const int stepX = (from.x < to.x) ? 1 : -1;
+    const int stepY = (from.y < to.y) ? 1 : -1;
+    int error = dx + dy;
+
+    while (true)
+    {
+        add_pixel_to_buffer(Pixel{ x, y, from.color });
+        if (x == to.x && y == to.y) break;
+
+        const int doubleError = 2 * error;
+        if (doubleError >= dy) { error += dy; x += stepX; }
+        if (doubleError <= dx) { error += dx; y += stepY; }
+    }
+}
+
+// Spinning wireframe mesh loaded from an OBJ file.
+// Every vertex goes through the 3D pipeline (model -> view -> projection -> divide -> viewport),
+// then each triangle is drawn as 3 lines, shaded by depth (bright = near, dim = far).
+void chapter_6(const Mesh& mesh, float seconds)
+{
+    // Projection: 50 degrees vertical field of view
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    // View: camera 3 units back, looking at the origin where the mesh sits, +Y is up
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        math::Vector3<float>(0.0f, 0.0f, 3.0f),
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f)
+    );
+
+    // Model: spin around the Y axis
+    const math::Mat4<float> model = math::Mat4<float>::Rotate(
+        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f)
+    );
+
+    // Row vectors (p * M): model is applied first, then view.
+    const math::Mat4<float> modelView = model * view;
+
+    // Project every vertex once, faces will reuse them by index.
+    struct ProjectedVertex
+    {
+        int x = 0, y = 0;
+        float depth = 0.0f;   // distance in front of the camera (bigger = farther)
+        bool visible = false; // false if behind the camera
+    };
+
+    std::vector<ProjectedVertex> projected(mesh.vertices.size());
+    float minDepth = std::numeric_limits<float>::max();
+    float maxDepth = std::numeric_limits<float>::lowest();
+
+    for (size_t i = 0; i < mesh.vertices.size(); i++)
+    {
+        // Model space -> camera space
+        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+
+        // The camera looks down -Z, so the distance in front of it is -z (this is also clip.w).
+        // We shade by this depth instead of NDC z: NDC z barely changes across a small object,
+        // every edge would end up the same grey.
+        const float depth = -cameraPos.z;
+        if (depth <= 0.0001f) continue;
+
+        // Camera space -> NDC [-1, 1] (MultiplyPoint does the perspective divide by w)
+        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+
+        // NDC -> screen pixels (Y is flipped: up in NDC is down on screen)
+        projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
+        projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+        projected[i].depth = depth;
+        projected[i].visible = true;
+
+        minDepth = std::min(minDepth, depth);
+        maxDepth = std::max(maxDepth, depth);
+    }
+
+    const float depthRange = (maxDepth > minDepth) ? (maxDepth - minDepth) : 1.0f;
+
+    for (const Face& face : mesh.faces)
+    {
+        const ProjectedVertex& vA = projected[face.a];
+        const ProjectedVertex& vB = projected[face.b];
+        const ProjectedVertex& vC = projected[face.c];
+        if (!vA.visible || !vB.visible || !vC.visible) continue;
+
+        // Depth cue: map the mesh's own near..far span to a bright..dim grey,
+        // so it stays readable whatever the distance to the camera.
+        const float averageDepth = (vA.depth + vB.depth + vC.depth) / 3.0f;
+        const float far01 = (averageDepth - minDepth) / depthRange; // 0 = near, 1 = far
+        const uint8_t level = static_cast<uint8_t>(std::clamp(240 - static_cast<int>(far01 * 200.0f), 0, 255));
+        const Color3 color{ level, level, level };
+
+        const Pixel pA{ vA.x, vA.y, color };
+        const Pixel pB{ vB.x, vB.y, color };
+        const Pixel pC{ vC.x, vC.y, color };
+
+        chapter_6_draw_line(pA, pB);
+        chapter_6_draw_line(pB, pC);
+        chapter_6_draw_line(pC, pA);
+    }
+}
+
 // =============
 // Renderer custom functions
 
@@ -222,6 +415,11 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
 
 int main()
 {
+    // Load the mesh once, before the loop (chapter 6)
+    Mesh spot;
+    if (!mesh::loadObj("assets/spot.obj", spot)) return EXIT_FAILURE;
+    std::cout << "Loaded spot.obj:\t" << spot.vertices.size() << " vertices, " << spot.faces.size() << " faces\n";
+
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
@@ -268,54 +466,10 @@ int main()
             }
         }
 
-        // Calculate the rotation angle from elapsed time.
-        const double seconds =
+        // Elapsed time, used by the chapters to animate.
+        const float seconds = static_cast<float>(
             static_cast<double>(SDL_GetPerformanceCounter() - start)
-            / static_cast<double>(freq);
-
-        const float angle = static_cast<float>(seconds);
-
-        // Define the triangle in local coordinates.
-        const math::Vector3<float> baseA(
-            0.0f, -static_cast<float>(CIRCLE_RAY), 0.0f);
-
-        const float halfBase =
-            static_cast<float>(CIRCLE_RAY) * 0.8660254f;
-
-        const math::Vector3<float> baseB(
-            halfBase, CIRCLE_RAY * 0.5f, 0.0f);
-
-        const math::Vector3<float> baseC(
-            -halfBase, CIRCLE_RAY * 0.5f, 0.0f);
-
-        // Create the Z-axis rotation matrix.
-        const float c = std::cos(angle);
-        const float s = std::sin(angle);
-
-        const math::Mat4<float> rotation(
-            c, s, 0.0f, 0.0f,
-            -s, c, 0.0f, 0.0f,
-            0.0f, 0.0f, 1.0f, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f
-        );
-
-        // Translate the triangle to the center of the screen.
-        const math::Mat4<float> translation =
-            math::Mat4<float>::Translate(
-                math::Vector3<float>(
-                    WIDTH * 0.5f,
-                    HEIGHT * 0.5f,
-                    0.0f
-                )
-            );
-
-        // Apply rotation first, then translation.
-        const math::Mat4<float> transform = rotation * translation;
-
-        // Transform all three vertices.
-        const auto transformedA = transform.MultiplyPointAffine(baseA);
-        const auto transformedB = transform.MultiplyPointAffine(baseB);
-        const auto transformedC = transform.MultiplyPointAffine(baseC);
+            / static_cast<double>(freq));
 
         // Clear the CPU framebuffer.
         const uint32_t backgroundColor =
@@ -323,34 +477,9 @@ int main()
 
         std::fill_n(frameBuffer, WIDTH * HEIGHT, backgroundColor);
 
-        // Draw the reference circle.
-        chapter_4_draw_circle(
-            Pixel{
-                static_cast<int>(WIDTH * 0.5f),
-                static_cast<int>(HEIGHT * 0.5f),
-                Color3{ 60, 60, 80, 255 }
-            },
-            CIRCLE_RAY
-        );
-
-        // Convert transformed vertices to pixels.
-        Pixel pA{
-            static_cast<int>(transformedA.x), static_cast<int>(transformedA.y),
-            Color3{ 255, 0, 0, 255 }
-        };
-
-        Pixel pB{
-            static_cast<int>(transformedB.x), static_cast<int>(transformedB.y),
-            Color3{ 0, 255, 0, 255 }
-        };
-
-        Pixel pC{
-            static_cast<int>(transformedC.x), static_cast<int>(transformedC.y),
-            Color3{ 0, 0, 255, 255 }
-        };
-
-        // Rasterize the RGB triangle.
-        chapter_3(pA, pB, pC);
+        // Draw the current chapter.
+        //chapter_4(seconds);
+        chapter_6(spot, seconds);
 
         // Upload the framebuffer and display it.
         SDL_RenderClear(renderer);
@@ -364,6 +493,22 @@ int main()
 
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         SDL_RenderPresent(renderer);
+
+        // FPS in the window title, refreshed once per second.
+        const Uint64 now = SDL_GetPerformanceCounter();
+        fps_accum += static_cast<double>(now - last) / static_cast<double>(freq);
+        fps_count++;
+        last = now;
+
+        if (fps_accum >= 1.0)
+        {
+            const double fps = fps_count / fps_accum;
+            const double ms = 1000.0 * fps_accum / fps_count;
+            SDL_snprintf(title, sizeof(title), "Fenetre Test | %d tris | %.1f FPS (%.2f ms)", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_SetWindowTitle(window, title);
+            fps_accum = 0.0;
+            fps_count = 0;
+        }
     }
 
     SDL_DestroyTexture(texture);

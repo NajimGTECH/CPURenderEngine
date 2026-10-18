@@ -104,6 +104,8 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+# ...except the OBJ meshes used as assets
+!CPURender/assets/*.obj
 *.idb
 *.iobj
 *.pch
