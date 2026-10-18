@@ -81,8 +81,8 @@ float dot_product(const Vec3& vecA, const Vec3& vecB)
 
 Vec3 cross_product(const Vec3& vecA, const Vec3& vecB)
 {
-    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y, 
-        vecA.z * vecB.x - vecA.x * vecB.z, 
+    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y,
+        vecA.z * vecB.x - vecA.x * vecB.z,
         vecA.x * vecB.y - vecA.y * vecB.x };
 }
 
@@ -154,7 +154,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
 {
     float area = chapter_3_edge(pA, pB, pC);
     if (area == 0.f) return;
-    if (area < 0.f) 
+    if (area < 0.f)
     {
         std::swap(pB.x, pC.x);
         std::swap(pB.y, pC.y);
@@ -174,7 +174,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
             Pixel point{ x, y };
             float edgeA = chapter_3_edge(pB, pC, point);
             float edgeB = chapter_3_edge(pC, pA, point);
-            float edgeC= chapter_3_edge(pA, pB, point);
+            float edgeC = chapter_3_edge(pA, pB, point);
 
             // Inside if all three weights are non negative
             if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
@@ -520,6 +520,201 @@ void chapter_6(const Mesh& mesh, float seconds)
 }
 
 // =============
+// Chapter 8: Backface culling + Z-buffer
+
+// Toggle these options to compare the rendering results.
+constexpr bool USE_ZBUFFER = true;
+constexpr bool CULL_BACKFACES = true;
+
+// Stores the nearest normalized-device depth for each pixel.
+float zBuffer[WIDTH * HEIGHT];
+
+void clear_zbuffer()
+{
+    std::fill_n(zBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+}
+
+// Returns the signed 2D area of triangle (A, B, P).
+int chapter_7_edge(int ax, int ay, int bx, int by, int px, int py)
+{
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+int chapter_7_clampi(int value, int minimum, int maximum)
+{
+    return std::clamp(value, minimum, maximum);
+}
+
+// Fills a triangle and optionally keeps only the nearest fragment per pixel.
+void chapter_7_draw_triangle(
+    int x0, int y0, float z0,
+    int x1, int y1, float z1,
+    int x2, int y2, float z2,
+    float zMin, float zRange)
+{
+    int area = chapter_7_edge(x0, y0, x1, y1, x2, y2);
+    if (area == 0)
+    {
+        return;
+    }
+
+    // Normalize winding. Depth values must follow their vertices.
+    if (area < 0)
+    {
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+        std::swap(z1, z2);
+        area = -area;
+    }
+
+    // Restrict rasterization to the visible framebuffer.
+    const int minX = chapter_7_clampi(std::min({ x0, x1, x2 }), 0, WIDTH - 1);
+    const int minY = chapter_7_clampi(std::min({ y0, y1, y2 }), 0, HEIGHT - 1);
+    const int maxX = chapter_7_clampi(std::max({ x0, x1, x2 }), 0, WIDTH - 1);
+    const int maxY = chapter_7_clampi(std::max({ y0, y1, y2 }), 0, HEIGHT - 1);
+
+    const float inverseArea = 1.0f / static_cast<float>(area);
+
+    for (int y = minY; y <= maxY; ++y)
+    {
+        for (int x = minX; x <= maxX; ++x)
+        {
+            const int w0 = chapter_7_edge(x1, y1, x2, y2, x, y);
+            const int w1 = chapter_7_edge(x2, y2, x0, y0, x, y);
+            const int w2 = chapter_7_edge(x0, y0, x1, y1, x, y);
+
+            // The pixel is outside the triangle if any edge value is negative.
+            if ((w0 | w1 | w2) < 0)
+            {
+                continue;
+            }
+
+            // Barycentric weights interpolate the depth at this pixel.
+            const float weight0 = static_cast<float>(w0) * inverseArea;
+            const float weight1 = static_cast<float>(w1) * inverseArea;
+            const float weight2 = static_cast<float>(w2) * inverseArea;
+            const float depth = weight0 * z0 + weight1 * z1 + weight2 * z2;
+            const int index = y * WIDTH + x;
+
+            if constexpr (USE_ZBUFFER)
+            {
+                // With the current perspective matrix, smaller NDC Z is nearer.
+                if (depth >= zBuffer[index])
+                {
+                    continue;
+                }
+
+                zBuffer[index] = depth;
+            }
+
+            // Visualize depth as grayscale: near is bright, far is dark.
+            const float normalizedDepth = std::clamp((depth - zMin) / zRange, 0.0f, 1.0f);
+            const uint8_t intensity = static_cast<uint8_t>(
+                chapter_7_clampi(240 - static_cast<int>(normalizedDepth * 200.0f), 0, 255));
+
+            frameBuffer[index] = Color3{ intensity, intensity, intensity, 255 }.toRGB();
+        }
+    }
+}
+
+struct Chapter8ProjectedVertex
+{
+    int x = 0;
+    int y = 0;
+    float depth = 0.0f;
+    bool visible = false;
+};
+
+// Solid rotating OBJ mesh. Backface culling rejects triangles before rasterization.
+void chapter_8(const Mesh& mesh, float seconds, int& drawnTriangles, int& culledTriangles)
+{
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+
+    const math::Mat4<float> projection =
+        math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        math::Vector3<float>(0.0f, 0.0f, 3.0f),
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+
+    const math::Mat4<float> model = math::Mat4<float>::Rotate(
+        math::Quaternion::FromAxisAngle(
+            math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+
+    const math::Mat4<float> modelView = model * view;
+    std::vector<Chapter8ProjectedVertex> projected(mesh.vertices.size());
+
+    float zMin = std::numeric_limits<float>::max();
+    float zMax = std::numeric_limits<float>::lowest();
+
+    for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
+    {
+        const math::Vector3<float> cameraPosition =
+            modelView.MultiplyPointAffine(mesh.vertices[i]);
+
+        // The camera looks along negative Z.
+        if (-cameraPosition.z <= 0.0001f)
+        {
+            continue;
+        }
+
+        // MultiplyPoint applies the perspective divide and returns NDC coordinates.
+        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPosition);
+
+        projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
+        projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+        projected[i].depth = ndc.z;
+        projected[i].visible = true;
+
+        zMin = std::min(zMin, ndc.z);
+        zMax = std::max(zMax, ndc.z);
+    }
+
+    // Avoid division by zero for a degenerate depth range.
+    const float zRange = (zMax > zMin) ? (zMax - zMin) : 1.0f;
+
+    drawnTriangles = 0;
+    culledTriangles = 0;
+
+    for (const Face& face : mesh.faces)
+    {
+        const Chapter8ProjectedVertex& a = projected[face.a];
+        const Chapter8ProjectedVertex& b = projected[face.b];
+        const Chapter8ProjectedVertex& c = projected[face.c];
+
+        if (!a.visible || !b.visible || !c.visible)
+        {
+            continue;
+        }
+
+        // The viewport flips Y, so front-facing triangles have negative area.
+        const int area = chapter_7_edge(a.x, a.y, b.x, b.y, c.x, c.y);
+        if (area == 0)
+        {
+            continue; // Edge-on or degenerate triangle.
+        }
+
+        if constexpr (CULL_BACKFACES)
+        {
+            if (area >= 0)
+            {
+                ++culledTriangles;
+                continue;
+            }
+        }
+
+        ++drawnTriangles;
+        chapter_7_draw_triangle(
+            a.x, a.y, a.depth,
+            b.x, b.y, b.depth,
+            c.x, c.y, c.depth,
+            zMin, zRange);
+    }
+}
+
+// =============
 // Renderer custom functions
 
 void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
@@ -528,7 +723,7 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture)
     SDL_RenderClear(renderer);
 
     // Drawing stuff...
-    Pixel pA{WIDTH / 2, HEIGHT / 2 - CIRCLE_RAY, Color3{255, 0, 0}};
+    Pixel pA{ WIDTH / 2, HEIGHT / 2 - CIRCLE_RAY, Color3{255, 0, 0} };
     Pixel pB{ WIDTH / 2 - CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 255, 0} };
     Pixel pC{ WIDTH / 2 + CIRCLE_RAY, HEIGHT / 2 + CIRCLE_RAY, Color3{0, 0, 255} };
     chapter_3(pA, pB, pC);
@@ -575,7 +770,9 @@ int main()
     Uint64 last = start;
     double fps_accum = 0.0;
     int    fps_count = 0;
-    char   title[160];
+    char   title[220];
+    int drawnTriangles = 0;
+    int culledTriangles = 0;
 
     // Loop
     bool isRunning = true;
@@ -606,11 +803,13 @@ int main()
             Color3{ 16, 16, 24, 255 }.toRGB();
 
         std::fill_n(frameBuffer, WIDTH * HEIGHT, backgroundColor);
+        clear_zbuffer();
 
         // Draw the current chapter.
         //chapter_4(seconds);
         //chapter_5(seconds);
-        chapter_6(spot, seconds);
+        //chapter_6(spot, seconds);
+        chapter_8(spot, seconds, drawnTriangles, culledTriangles);
 
         // Upload the framebuffer and display it.
         SDL_RenderClear(renderer);
@@ -635,7 +834,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Fenetre Test | %d tris | %.1f FPS (%.2f ms)", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_snprintf(title, sizeof(title), "Chapter 08 - Backface culling | drew %d, culled %d / %d | %.1f FPS (%.2f ms)", drawnTriangles, culledTriangles, static_cast<int>(spot.faces.size()), fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
