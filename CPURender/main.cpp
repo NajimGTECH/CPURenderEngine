@@ -105,7 +105,7 @@ void chapter_1()
     {
         for (int x = 0; x < WIDTH; x++)
         {
-            Pixel pixel(x, y, Color3{ static_cast<uint8_t>(x * 255 / WIDTH), 64, static_cast<uint8_t>(y * 255 / WIDTH) });
+            Pixel pixel(x, y, Color3{ static_cast<uint8_t>(x * 255 / WIDTH), 64, static_cast<uint8_t>(y * 255 / HEIGHT) });
             add_pixel_to_buffer(pixel);
         }
     }
