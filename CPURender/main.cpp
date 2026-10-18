@@ -280,7 +280,7 @@ void chapter_4(float seconds)
 // Bresenham line: integer-only walk from one pixel to the other.
 // "error" tracks how far the ideal line is from the pixel we're on,
 // and tells us when to step in x, in y, or in both.
-void chapter_5_draw_line(const Pixel& from, const Pixel& to)
+void chapter_6_draw_line(const Pixel& from, const Pixel& to)
 {
     int x = from.x;
     int y = from.y;
@@ -299,136 +299,6 @@ void chapter_5_draw_line(const Pixel& from, const Pixel& to)
         const int doubleError = 2 * error;
         if (doubleError >= dy) { error += dy; x += stepX; }
         if (doubleError <= dx) { error += dx; y += stepY; }
-    }
-}
-
-// Cube: 8 corners, and 12 edges joining two corners by index.
-const math::Vector3<float> CHAPTER_5_CUBE_VERTICES[8] =
-{
-    { -1.0f, -1.0f, -1.0f },
-    {  1.0f, -1.0f, -1.0f },
-    {  1.0f,  1.0f, -1.0f },
-    { -1.0f,  1.0f, -1.0f },
-
-    { -1.0f, -1.0f,  1.0f },
-    {  1.0f, -1.0f,  1.0f },
-    {  1.0f,  1.0f,  1.0f },
-    { -1.0f,  1.0f,  1.0f }
-};
-
-struct CubeEdge
-{
-    int start = 0, end = 0;
-    int axis = 0; // 0 = X, 1 = Y, 2 = Z (the axis the edge is parallel to, used for its color)
-};
-
-const CubeEdge CHAPTER_5_CUBE_EDGES[12] =
-{
-    { 0, 1, 0 }, { 3, 2, 0 }, { 7, 6, 0 }, { 4, 5, 0 },
-    { 0, 3, 1 }, { 1, 2, 1 }, { 5, 6, 1 }, { 4, 7, 1 },
-    { 0, 4, 2 }, { 1, 5, 2 }, { 2, 6, 2 }, { 3, 7, 2 }
-};
-
-const Color3 CHAPTER_5_AXIS_COLORS[3] =
-{
-    Color3{ 230, 80, 80 },
-    Color3{ 80, 210, 90 },
-    Color3{ 90, 140, 240 }
-};
-
-// Rotation around X (row-vector convention).
-math::Mat4<float> chapter_5_rotation_x(float angle)
-{
-    const float c = std::cos(angle);
-    const float s = std::sin(angle);
-
-    return math::Mat4<float>(
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, c, s, 0.0f,
-        0.0f, -s, c, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    );
-}
-
-// Rotation around Y (row-vector convention).
-math::Mat4<float> chapter_5_rotation_y(float angle)
-{
-    const float c = std::cos(angle);
-    const float s = std::sin(angle);
-
-    return math::Mat4<float>(
-        c, 0.0f, s, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        -s, 0.0f, c, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f
-    );
-}
-
-struct ScreenVertex
-{
-    int x = 0, y = 0;
-    bool visible = false; // false if behind the camera
-};
-
-// Model space -> clip space (p * MVP) -> NDC (divide by w) -> screen pixels (viewport).
-ScreenVertex chapter_5_project_vertex(const math::Vector3<float>& vertex, const math::Mat4<float>& mvp)
-{
-    // Clip space. z is not needed for a wireframe, only x, y and w.
-    const float clipX = vertex.x * mvp(0, 0) + vertex.y * mvp(1, 0) + vertex.z * mvp(2, 0) + mvp(3, 0);
-    const float clipY = vertex.x * mvp(0, 1) + vertex.y * mvp(1, 1) + vertex.z * mvp(2, 1) + mvp(3, 1);
-    const float clipW = vertex.x * mvp(0, 3) + vertex.y * mvp(1, 3) + vertex.z * mvp(2, 3) + mvp(3, 3);
-
-    // w is the distance in front of the camera: <= 0 means behind it (and we can't divide by 0)
-    if (clipW <= 0.0001f) return {};
-
-    // Perspective divide: far points get divided by a bigger w, so they end up closer to the center
-    const float ndcX = clipX / clipW;
-    const float ndcY = clipY / clipW;
-
-    // Viewport: NDC [-1, 1] -> pixels (Y is flipped: up in NDC is down on screen)
-    return {
-        static_cast<int>((ndcX + 1.0f) * 0.5f * WIDTH),
-        static_cast<int>((1.0f - ndcY) * 0.5f * HEIGHT),
-        true
-    };
-}
-
-// Spinning wireframe cube through the full 3D pipeline: Model -> View -> Projection.
-void chapter_5(float seconds)
-{
-    // Model: rotate the cube around its X and Y axes
-    const math::Mat4<float> model = chapter_5_rotation_x(seconds * 0.5f) * chapter_5_rotation_y(seconds * 0.8f);
-
-    // View: camera at (0, 0, 5), looking at the origin, +Y is up
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
-        math::Vector3<float>(0.0f, 0.0f, 5.0f),
-        math::Vector3<float>(0.0f, 0.0f, 0.0f),
-        math::Vector3<float>(0.0f, 1.0f, 0.0f)
-    );
-
-    // Projection: 60 degrees vertical field of view
-    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
-    const float fovY = 60.0f * std::numbers::pi_v<float> / 180.0f;
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
-
-    // Row vectors (p * M): model, then view, then projection
-    const math::Mat4<float> mvp = model * view * projection;
-
-    // Project the 8 corners once, the edges reuse them by index
-    ScreenVertex screenVertices[8];
-    for (int i = 0; i < 8; i++)
-    {
-        screenVertices[i] = chapter_5_project_vertex(CHAPTER_5_CUBE_VERTICES[i], mvp);
-    }
-
-    for (const CubeEdge& edge : CHAPTER_5_CUBE_EDGES)
-    {
-        const ScreenVertex& start = screenVertices[edge.start];
-        const ScreenVertex& end = screenVertices[edge.end];
-        if (!start.visible || !end.visible) continue;
-
-        const Color3& color = CHAPTER_5_AXIS_COLORS[edge.axis];
-        chapter_5_draw_line(Pixel{ start.x, start.y, color }, Pixel{ end.x, end.y, color });
     }
 }
 
@@ -513,9 +383,9 @@ void chapter_6(const Mesh& mesh, float seconds)
         const Pixel pB{ vB.x, vB.y, color };
         const Pixel pC{ vC.x, vC.y, color };
 
-        chapter_5_draw_line(pA, pB);
-        chapter_5_draw_line(pB, pC);
-        chapter_5_draw_line(pC, pA);
+        chapter_6_draw_line(pA, pB);
+        chapter_6_draw_line(pB, pC);
+        chapter_6_draw_line(pC, pA);
     }
 }
 
@@ -609,7 +479,6 @@ int main()
 
         // Draw the current chapter.
         //chapter_4(seconds);
-        //chapter_5(seconds);
         chapter_6(spot, seconds);
 
         // Upload the framebuffer and display it.
