@@ -85,8 +85,8 @@ float dot_product(const Vec3& vecA, const Vec3& vecB)
 
 Vec3 cross_product(const Vec3& vecA, const Vec3& vecB)
 {
-    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y, 
-        vecA.z * vecB.x - vecA.x * vecB.z, 
+    return Vec3{ vecA.y * vecB.z - vecA.z * vecB.y,
+        vecA.z * vecB.x - vecA.x * vecB.z,
         vecA.x * vecB.y - vecA.y * vecB.x };
 }
 
@@ -158,7 +158,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
 {
     float area = chapter_3_edge(pA, pB, pC);
     if (area == 0.f) return;
-    if (area < 0.f) 
+    if (area < 0.f)
     {
         std::swap(pB.x, pC.x);
         std::swap(pB.y, pC.y);
@@ -178,7 +178,7 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
             Pixel point{ x, y };
             float edgeA = chapter_3_edge(pB, pC, point);
             float edgeB = chapter_3_edge(pC, pA, point);
-            float edgeC= chapter_3_edge(pA, pB, point);
+            float edgeC = chapter_3_edge(pA, pB, point);
 
             // Inside if all three weights are non negative
             if (edgeA >= 0 and edgeB >= 0 and edgeC >= 0)
@@ -477,6 +477,192 @@ void chapter_9_draw_triangle_textured(TexturedVertex vA, TexturedVertex vB, Text
     }
 }
 
+
+void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, TexturedVertex vC, const Texture& meshTexture, float brightness)
+{
+    float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
+    if (area == 0.f) return;
+    if (area < 0.f)
+    {
+        // Swap the whole vertex, so its depth and UV follow its position
+        std::swap(vB, vC);
+        area = -area;
+    }
+
+    const Pixel pA{ vA.x, vA.y };
+    const Pixel pB{ vB.x, vB.y };
+    const Pixel pC{ vC.x, vC.y };
+
+    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
+    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
+    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
+    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+
+    // u and v do NOT vary linearly across the screen under perspective, but u/w, v/w and 1/w do.
+    // So we pre-divide the UVs by w here, and divide back at each pixel.
+    const float uOverWA = vA.uv.u * vA.invW, vOverWA = vA.uv.v * vA.invW;
+    const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
+    const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
+
+    for (int y = min_y; y <= max_y; y++)
+    {
+        for (int x = min_x; x <= max_x; x++)
+        {
+            const Pixel point{ x, y };
+            const float edgeA = chapter_3_edge(pB, pC, point);
+            const float edgeB = chapter_3_edge(pC, pA, point);
+            const float edgeC = chapter_3_edge(pA, pB, point);
+
+            // Outside the triangle
+            if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
+
+            const float weightA = edgeA / area;
+            const float weightB = edgeB / area;
+            const float weightC = edgeC / area;
+
+            // Depth test: only draw if this pixel is closer than what's already there.
+            // NDC z already varies linearly across the screen, so a plain blend is correct.
+            const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
+            const int index = y * WIDTH + x;
+            if (z >= depthBuffer[index]) continue;
+
+            float u, v;
+            if (CHAPTER_9_PERSPECTIVE_CORRECT)
+            {
+                // Blend u/w, v/w and 1/w, then divide back to get the true u, v
+                const float invW = weightA * vA.invW + weightB * vB.invW + weightC * vC.invW;
+                u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) / invW;
+                v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
+            }
+            else
+            {
+                // Naive blend, wrong under perspective
+                u = weightA * vA.uv.u + weightB * vB.uv.u + weightC * vC.uv.u;
+                v = weightA * vA.uv.v + weightB * vB.uv.v + weightC * vC.uv.v;
+            }
+
+            depthBuffer[index] = z;
+
+            // Échantillonne la texture, puis assombrit ses trois canaux RGB.
+            Color3 texel = texture::sample(meshTexture, u, v);
+            texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness), 0, 255));
+            texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness), 0, 255));
+            texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness), 0, 255));
+            add_pixel_to_buffer(Pixel{ x, y, texel });
+        }
+    }
+}
+
+
+// ============================================================
+// Chapitre 10 : éclairage diffus (Lambert)
+// ============================================================
+constexpr float CHAPTER_10_AMBIENT = 0.18f;
+
+// Calcule une normale unitaire par face dans l'espace local du modèle.
+// Le produit vectoriel de deux arêtes donne une direction perpendiculaire au triangle.
+std::vector<math::Vector3<float>> chapter_10_compute_face_normals(const Mesh& mesh)
+{
+    std::vector<math::Vector3<float>> normals;
+    normals.reserve(mesh.faces.size());
+
+    for (const Face& face : mesh.faces)
+    {
+        const auto& a = mesh.vertices[face.a];
+        const auto& b = mesh.vertices[face.b];
+        const auto& c = mesh.vertices[face.c];
+
+        const math::Vector3<float> e1(b.x - a.x, b.y - a.y, b.z - a.z);
+        const math::Vector3<float> e2(c.x - a.x, c.y - a.y, c.z - a.z);
+
+        math::Vector3<float> normal(
+            e1.y * e2.z - e1.z * e2.y,
+            e1.z * e2.x - e1.x * e2.z,
+            e1.x * e2.y - e1.y * e2.x);
+
+        const float length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+        if (length > 0.000001f)
+        {
+            normal.x /= length;
+            normal.y /= length;
+            normal.z /= length;
+        }
+        normals.push_back(normal);
+    }
+    return normals;
+}
+
+// Même pipeline que le chapitre 9, avec une luminosité plate calculée pour chaque triangle.
+void chapter_10(const Mesh& mesh, const Texture& meshTexture,
+    const std::vector<math::Vector3<float>>& faceNormals, float seconds)
+{
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        math::Vector3<float>(0.0f, 0.0f, 3.0f),
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+
+    const math::Mat4<float> model = math::Mat4<float>::Rotate(
+        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    const math::Mat4<float> modelView = model * view;
+
+    // Direction de la lumière : vecteur normalisé pointant de la surface vers la lumière.
+    math::Vector3<float> light(0.4f, 0.8f, 0.45f);
+    const float lightLength = std::sqrt(light.x * light.x + light.y * light.y + light.z * light.z);
+    light.x /= lightLength;
+    light.y /= lightLength;
+    light.z /= lightLength;
+
+    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+
+    std::vector<TexturedVertex> projected(mesh.vertices.size());
+    std::vector<bool> visible(mesh.vertices.size(), false);
+
+    for (size_t i = 0; i < mesh.vertices.size(); i++)
+    {
+        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+        const float w = -cameraPos.z;
+        if (w <= 0.0001f) continue;
+
+        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+        projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
+        projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+        projected[i].z = ndc.z;
+        projected[i].invW = 1.0f / w;
+        visible[i] = true;
+    }
+
+    for (size_t faceIndex = 0; faceIndex < mesh.faces.size(); ++faceIndex)
+    {
+        const Face& face = mesh.faces[faceIndex];
+        if (!visible[face.a] || !visible[face.b] || !visible[face.c]) continue;
+
+        TexturedVertex vA = projected[face.a];
+        TexturedVertex vB = projected[face.b];
+        TexturedVertex vC = projected[face.c];
+
+        // Le retournement de l'axe Y à l'écran rend l'aire des faces avant négative.
+        // Une aire positive indique une face arrière : on ne la dessine pas.
+        if (chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y }) >= 0.0f) continue;
+
+        vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
+        vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
+        vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
+
+        // La matrice modèle ne fait ici qu'une rotation : elle transforme la normale
+        // de l'espace local vers l'espace monde sans changer sa longueur.
+        const math::Vector3<float> normal = model.MultiplyPointAffine(faceNormals[faceIndex]);
+        float diffuse = normal.x * light.x + normal.y * light.y + normal.z * light.z;
+        diffuse = std::max(0.0f, diffuse); // Une face tournée à l'opposé de la lumière ne reçoit pas de lumière diffuse.
+        const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;
+
+        chapter_10_draw_triangle_lit(vA, vB, vC, meshTexture, brightness);
+    }
+}
+
 // Spinning textured mesh: filled triangles, a depth buffer so near triangles hide far ones,
 // backface culling, and a texture wrapped on it with perspective-correct UVs.
 void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
@@ -552,7 +738,7 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
 // Renderer custom functions
 
 // Clears the frame, draws the current chapter, then sends the framebuffer to the screen.
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture)
+void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture, const std::vector<math::Vector3<float>>& faceNormals)
 {
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
@@ -561,7 +747,7 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     //chapter_1();
     //chapter_4(seconds);
     //chapter_6(mesh, seconds);
-    chapter_9(mesh, meshTexture, seconds);
+    chapter_10(mesh, meshTexture, faceNormals, seconds);
 
     // Upload the framebuffer and display it.
     SDL_RenderClear(renderer);
@@ -583,6 +769,9 @@ int main()
     Texture spotTexture;
     if (!texture::loadPng("assets/spot_texture.png", spotTexture)) return EXIT_FAILURE;
     std::cout << "Loaded spot_texture.png:\t" << spotTexture.width << "x" << spotTexture.height << " texels\n";
+
+    // Les normales ne dépendent pas de la rotation : on les calcule une seule fois.
+    const std::vector<math::Vector3<float>> faceNormals = chapter_10_compute_face_normals(spot);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -636,7 +825,7 @@ int main()
             / static_cast<double>(freq));
 
         // Draw the frame (the current chapter is picked inside update_render).
-        update_render(renderer, texture, seconds, spot, spotTexture);
+        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals);
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -648,7 +837,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Fenetre Test | %d tris | %.1f FPS (%.2f ms)", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_snprintf(title, sizeof(title), "Chapitre 10 - Lambert | %d tris | %.1f FPS (%.2f ms)", static_cast<int>(spot.faces.size()), fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
