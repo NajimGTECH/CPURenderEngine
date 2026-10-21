@@ -52,3 +52,44 @@ Color3 texture::sample(const Texture& texture, float u, float v)
 
     return texture.texels[y * texture.width + x];
 }
+
+Color3 texture::sampleBilinear(const Texture& texture, float u, float v)
+{
+    // Same wrap as the nearest-neighbour sample
+    u -= std::floor(u);
+    v -= std::floor(v);
+
+    // Continuous texel position (v flipped like above).
+    // (size - 1) keeps u = 1 on the last texel instead of one past the edge.
+    const float fx = u * (texture.width - 1);
+    const float fy = (1.0f - v) * (texture.height - 1);
+
+    const int x0 = std::clamp(static_cast<int>(std::floor(fx)), 0, texture.width - 1);
+    const int y0 = std::clamp(static_cast<int>(std::floor(fy)), 0, texture.height - 1);
+    const int x1 = std::min(x0 + 1, texture.width - 1);
+    const int y1 = std::min(y0 + 1, texture.height - 1);
+
+    // Fractional position of the sample inside the 4-texel cell
+    const float tx = fx - std::floor(fx);
+    const float ty = fy - std::floor(fy);
+
+    const Color3& c00 = texture.texels[y0 * texture.width + x0];
+    const Color3& c10 = texture.texels[y0 * texture.width + x1];
+    const Color3& c01 = texture.texels[y1 * texture.width + x0];
+    const Color3& c11 = texture.texels[y1 * texture.width + x1];
+
+    // The 4 weights always sum to 1
+    const float w00 = (1.0f - tx) * (1.0f - ty);
+    const float w10 = tx * (1.0f - ty);
+    const float w01 = (1.0f - tx) * ty;
+    const float w11 = tx * ty;
+
+    const float red = w00 * c00.r + w10 * c10.r + w01 * c01.r + w11 * c11.r;
+    const float green = w00 * c00.g + w10 * c10.g + w01 * c01.g + w11 * c11.g;
+    const float blue = w00 * c00.b + w10 * c10.b + w01 * c01.b + w11 * c11.b;
+
+    return Color3{
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(red)), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(green)), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(blue)), 0, 255)) };
+}

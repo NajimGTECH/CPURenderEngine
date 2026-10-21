@@ -22,4 +22,8 @@ namespace texture
 
     // Nearest-neighbour sample: returns the texel closest to the texture coordinate (u, v).
     Color3 sample(const Texture& texture, float u, float v);
+
+    // Bilinear sample (chapter 12): blends the 4 texels around (u, v) by how close the point is to each.
+    // Smooths the blocky steps of the nearest-neighbour sample when the texture is magnified.
+    Color3 sampleBilinear(const Texture& texture, float u, float v);
 }

@@ -734,11 +734,379 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
     }
 }
 
+// ============================================================
+// Chapitre 11 : smooth shading (Phong) + reflets spéculaires
+// ============================================================
+constexpr float CHAPTER_11_SPEC_STRENGTH = 0.55f; // 0 = pas de reflet, 1 = aussi brillant que la lumière
+
+// Un sommet projeté, comme TexturedVertex, qui porte en plus sa normale (en espace monde).
+struct ShadedVertex
+{
+    int x = 0, y = 0;            // position à l'écran
+    float z = 0.0f;              // profondeur NDC, pour le test de profondeur
+    float invW = 0.0f;           // 1 / w, pour l'interpolation perspective-correcte
+    UV uv;                       // coordonnée de texture de ce coin
+    math::Vector3<float> normal; // normale du sommet, déjà tournée en espace monde
+};
+
+// Une normale par SOMMET : la somme des normales des faces qui le touchent, normalisée.
+// Deux triangles voisins partagent ainsi la même normale sur leurs coins communs :
+// la normale interpolée ne saute plus d'un triangle à l'autre, les facettes disparaissent.
+std::vector<math::Vector3<float>> chapter_11_compute_vertex_normals(const Mesh& mesh,
+    const std::vector<math::Vector3<float>>& faceNormals)
+{
+    std::vector<math::Vector3<float>> normals(mesh.vertices.size());
+
+    for (size_t faceIndex = 0; faceIndex < mesh.faces.size(); ++faceIndex)
+    {
+        const Face& face = mesh.faces[faceIndex];
+        normals[face.a] += faceNormals[faceIndex];
+        normals[face.b] += faceNormals[faceIndex];
+        normals[face.c] += faceNormals[faceIndex];
+    }
+
+    for (math::Vector3<float>& normal : normals) normal.Normalize();
+    return normals;
+}
+
+// x^32 en 5 multiplications (x^2, x^4, x^8, x^16, x^32), bien moins cher que std::pow dans la boucle par pixel.
+// La brillance (shininess) est donc fixée à 32.
+float chapter_11_pow32(float x)
+{
+    const float x2 = x * x;
+    const float x4 = x2 * x2;
+    const float x8 = x4 * x4;
+    const float x16 = x8 * x8;
+    return x16 * x16;
+}
+
+// Même remplissage que le chapitre 9, mais l'éclairage est calculé à chaque PIXEL (Phong) :
+// la normale est interpolée (perspective-correcte, comme les UV), re-normalisée,
+// puis on évalue le diffus de Lambert et le spéculaire de Blinn-Phong.
+// bilinear choisit l'échantillonnage de la texture (chapitre 12).
+void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVertex vC, const Texture& meshTexture,
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector, bool bilinear)
+{
+    float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
+    if (area == 0.f) return;
+    if (area < 0.f)
+    {
+        // On échange le sommet entier, pour que sa profondeur, son UV et sa normale suivent sa position
+        std::swap(vB, vC);
+        area = -area;
+    }
+
+    const Pixel pA{ vA.x, vA.y };
+    const Pixel pB{ vB.x, vB.y };
+    const Pixel pC{ vC.x, vC.y };
+
+    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
+    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
+    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
+    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+
+    // Comme au chapitre 9 : tout attribut interpolé en perspective est pré-divisé par w,
+    // les normales comprises.
+    const float uOverWA = vA.uv.u * vA.invW, vOverWA = vA.uv.v * vA.invW;
+    const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
+    const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
+    const math::Vector3<float> nOverWA = vA.normal * vA.invW;
+    const math::Vector3<float> nOverWB = vB.normal * vB.invW;
+    const math::Vector3<float> nOverWC = vC.normal * vC.invW;
+
+    for (int y = min_y; y <= max_y; y++)
+    {
+        for (int x = min_x; x <= max_x; x++)
+        {
+            const Pixel point{ x, y };
+            const float edgeA = chapter_3_edge(pB, pC, point);
+            const float edgeB = chapter_3_edge(pC, pA, point);
+            const float edgeC = chapter_3_edge(pA, pB, point);
+
+            // Hors du triangle
+            if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
+
+            const float weightA = edgeA / area;
+            const float weightB = edgeB / area;
+            const float weightC = edgeC / area;
+
+            // Test de profondeur
+            const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
+            const int index = y * WIDTH + x;
+            if (z >= depthBuffer[index]) continue;
+
+            const float invW = weightA * vA.invW + weightB * vB.invW + weightC * vC.invW;
+            const float u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) / invW;
+            const float v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
+
+            // La moyenne de vecteurs unitaires n'est pas unitaire (elle "s'affaisse" vers le centre) :
+            // on re-normalise, car les produits scalaires de l'éclairage supposent une normale unitaire.
+            math::Vector3<float> normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
+            normal.Normalize();
+
+            // Diffus (chapitre 10), mais par pixel
+            const float diffuse = std::max(0.0f, normal.Dot(light));
+            const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;
+
+            // Spéculaire de Blinn-Phong : maximal quand la normale pointe le long du demi-vecteur
+            const float specular = chapter_11_pow32(std::max(0.0f, normal.Dot(halfVector))) * CHAPTER_11_SPEC_STRENGTH;
+
+            depthBuffer[index] = z;
+
+            // texel * diffus, plus un reflet blanc par-dessus
+            Color3 texel = bilinear ? texture::sampleBilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
+            texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness + 255.0f * specular), 0, 255));
+            texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness + 255.0f * specular), 0, 255));
+            texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness + 255.0f * specular), 0, 255));
+            add_pixel_to_buffer(Pixel{ x, y, texel });
+        }
+    }
+}
+
+// Même pipeline que le chapitre 10, avec une normale par sommet et un éclairage par pixel.
+void chapter_11(const Mesh& mesh, const Texture& meshTexture,
+    const std::vector<math::Vector3<float>>& vertexNormals, float seconds)
+{
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        math::Vector3<float>(0.0f, 0.0f, 3.0f),
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+
+    const math::Mat4<float> model = math::Mat4<float>::Rotate(
+        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    const math::Mat4<float> modelView = model * view;
+
+    // Même lumière qu'au chapitre 10.
+    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
+
+    // La caméra est en z = 3 et regarde l'origine : depuis la surface, l'oeil est à peu près en +Z.
+    // On garde cette direction constante, donc le demi-vecteur H = normalize(L + V) se calcule une fois par image.
+    const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
+    const math::Vector3<float> halfVector = (light + viewDirection).Normalized();
+
+    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+
+    std::vector<ShadedVertex> projected(mesh.vertices.size());
+    std::vector<bool> visible(mesh.vertices.size(), false);
+
+    for (size_t i = 0; i < mesh.vertices.size(); i++)
+    {
+        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+        const float w = -cameraPos.z;
+        if (w <= 0.0001f) continue;
+
+        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+        projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
+        projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+        projected[i].z = ndc.z;
+        projected[i].invW = 1.0f / w;
+
+        // La normale est une direction : on la tourne avec la matrice modèle, sans translation.
+        projected[i].normal = model.MultiplyVector(vertexNormals[i]);
+        visible[i] = true;
+    }
+
+    for (const Face& face : mesh.faces)
+    {
+        if (!visible[face.a] || !visible[face.b] || !visible[face.c]) continue;
+
+        ShadedVertex vA = projected[face.a];
+        ShadedVertex vB = projected[face.b];
+        ShadedVertex vC = projected[face.c];
+
+        // Backface culling (voir chapitre 9)
+        if (chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y }) >= 0.0f) continue;
+
+        vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
+        vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
+        vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
+
+        chapter_11_draw_triangle_phong(vA, vB, vC, meshTexture, light, halfVector, false);
+    }
+}
+
+// ============================================================
+// Chapitre 12 : clipping sur le plan near + filtrage bilinéaire
+// ============================================================
+
+// Passer à false pour revenir à l'échantillonnage "plus proche voisin" (en blocs) du chapitre 9.
+constexpr bool CHAPTER_12_BILINEAR = true;
+
+// Distance entre la caméra et Spot. Mettre 0.4f pour entrer dans la vache :
+// la surface reste pleine jusqu'à la coupe, au lieu de perdre des triangles entiers.
+constexpr float CHAPTER_12_CAMERA_DISTANCE = 3.0f;
+
+// Un sommet en clip space (après la projection, AVANT la division par w),
+// avec tous les attributs que le clipping doit interpoler et dont le rasterizer a besoin ensuite.
+struct ClipVertex
+{
+    float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f; // position en clip space
+    UV uv;                                        // coordonnée de texture
+    math::Vector3<float> normal;                  // normale en espace monde
+};
+
+// p * M avec p = (x, y, z, 1), en gardant w : MultiplyPoint ferait déjà la division par w,
+// et c'est justement ce qu'on veut éviter tant que le triangle n'est pas clippé.
+ClipVertex chapter_12_to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p)
+{
+    ClipVertex vertex;
+    vertex.x = p.x * matrix(0, 0) + p.y * matrix(1, 0) + p.z * matrix(2, 0) + matrix(3, 0);
+    vertex.y = p.x * matrix(0, 1) + p.y * matrix(1, 1) + p.z * matrix(2, 1) + matrix(3, 1);
+    vertex.z = p.x * matrix(0, 2) + p.y * matrix(1, 2) + p.z * matrix(2, 2) + matrix(3, 2);
+    vertex.w = p.x * matrix(0, 3) + p.y * matrix(1, 3) + p.z * matrix(2, 3) + matrix(3, 3);
+    return vertex;
+}
+
+// Interpole TOUS les attributs : a * (1 - t) + b * t.
+ClipVertex chapter_12_lerp(const ClipVertex& a, const ClipVertex& b, float t)
+{
+    ClipVertex result;
+    result.x = a.x + t * (b.x - a.x);
+    result.y = a.y + t * (b.y - a.y);
+    result.z = a.z + t * (b.z - a.z);
+    result.w = a.w + t * (b.w - a.w);
+    result.uv.u = a.uv.u + t * (b.uv.u - a.uv.u);
+    result.uv.v = a.uv.v + t * (b.uv.v - a.uv.v);
+    result.normal = a.normal + (b.normal - a.normal) * t;
+    return result;
+}
+
+// Distance signée au plan near, en unités du clip space. Positive = devant le plan near (on garde).
+// Devant le near <=> z / w >= -1 <=> z + w >= 0 : le test marche sans diviser par w.
+float chapter_12_near_distance(const ClipVertex& vertex)
+{
+    return vertex.z + vertex.w;
+}
+
+// Clipping de Sutherland-Hodgman d'un triangle contre le plan near.
+// On parcourt les arêtes A->B, B->C, C->A et pour chacune on émet :
+//  - les deux bouts devant       -> le bout B
+//  - A devant, B derrière (sort) -> le point de croisement
+//  - A derrière, B devant (entre)-> le point de croisement, puis B
+//  - les deux derrière           -> rien
+// Le polygone obtenu a 0, 3 ou 4 sommets ; un quad est découpé en 2 triangles (0,1,2) et (0,2,3).
+// Écrit 0, 3 ou 6 sommets dans out et retourne le nombre de triangles (0, 1 ou 2).
+int chapter_12_clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6])
+{
+    const ClipVertex triangle[3] = { vA, vB, vC };
+    ClipVertex polygon[4]; // un triangle coupé par UN plan donne au plus 4 sommets
+    int count = 0;
+
+    for (int edge = 0; edge < 3; edge++)
+    {
+        const ClipVertex& a = triangle[edge];
+        const ClipVertex& b = triangle[(edge + 1) % 3];
+        const float distanceA = chapter_12_near_distance(a);
+        const float distanceB = chapter_12_near_distance(b);
+        const bool aInside = distanceA >= 0.0f;
+        const bool bInside = distanceB >= 0.0f;
+
+        // L'arête traverse le plan : le croisement est à la fraction t où la distance s'annule
+        if (aInside != bInside) polygon[count++] = chapter_12_lerp(a, b, distanceA / (distanceA - distanceB));
+        if (bInside) polygon[count++] = b;
+    }
+
+    if (count < 3) return 0;
+
+    out[0] = polygon[0]; out[1] = polygon[1]; out[2] = polygon[2];
+    if (count == 3) return 1;
+
+    out[3] = polygon[0]; out[4] = polygon[2]; out[5] = polygon[3];
+    return 2;
+}
+
+// Un triangle déjà clippé (entièrement devant le plan near, donc w > 0) :
+// division par w, viewport, backface culling, puis le rasterizer Phong du chapitre 11.
+void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& meshTexture,
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector)
+{
+    ShadedVertex projected[3];
+    for (int k = 0; k < 3; k++)
+    {
+        const float invW = 1.0f / triangle[k].w;
+        projected[k].x = static_cast<int>((triangle[k].x * invW + 1.0f) * 0.5f * WIDTH);
+        projected[k].y = static_cast<int>((1.0f - triangle[k].y * invW) * 0.5f * HEIGHT);
+        projected[k].z = triangle[k].z * invW;
+        projected[k].invW = invW;
+        projected[k].uv = triangle[k].uv;
+        projected[k].normal = triangle[k].normal;
+    }
+
+    // Backface culling (voir chapitre 9)
+    if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
+        Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
+
+    chapter_11_draw_triangle_phong(projected[0], projected[1], projected[2], meshTexture, light, halfVector, CHAPTER_12_BILINEAR);
+}
+
+// Même rendu que le chapitre 11, mais le pipeline est réorganisé autour du clipping :
+//  1) par sommet du mesh : seulement le passage en clip space et la normale monde (pas de division) ;
+//  2) par triangle : clipping near -> 0, 1 ou 2 triangles, puis division + viewport + culling + raster.
+// Le clipping peut créer de NOUVEAUX sommets (les points de croisement), c'est pour ça que
+// la division par w ne peut plus se faire une fois par sommet du mesh.
+void chapter_12(const Mesh& mesh, const Texture& meshTexture,
+    const std::vector<math::Vector3<float>>& vertexNormals, float seconds)
+{
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        math::Vector3<float>(0.0f, 0.0f, CHAPTER_12_CAMERA_DISTANCE),
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+
+    const math::Mat4<float> model = math::Mat4<float>::Rotate(
+        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+
+    // Vecteurs lignes (p * M) : modèle, puis vue, puis projection.
+    const math::Mat4<float> modelViewProjection = model * view * projection;
+
+    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
+    const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
+    const math::Vector3<float> halfVector = (light + viewDirection).Normalized();
+
+    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+
+    // 1) Par sommet : clip space + normale monde. Plus besoin du tableau "visible" :
+    // le clipping gère rigoureusement ce qui est derrière la caméra.
+    std::vector<ClipVertex> clipVertices(mesh.vertices.size());
+    for (size_t i = 0; i < mesh.vertices.size(); i++)
+    {
+        clipVertices[i] = chapter_12_to_clip_space(modelViewProjection, mesh.vertices[i]);
+        clipVertices[i].normal = model.MultiplyVector(vertexNormals[i]);
+    }
+
+    // 2) Par triangle
+    for (const Face& face : mesh.faces)
+    {
+        ClipVertex vA = clipVertices[face.a];
+        ClipVertex vB = clipVertices[face.b];
+        ClipVertex vC = clipVertices[face.c];
+
+        vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
+        vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
+        vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
+
+        ClipVertex clipped[6];
+        const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
+        for (int t = 0; t < triangleCount; t++)
+        {
+            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector);
+        }
+    }
+}
+
 // =============
 // Renderer custom functions
 
 // Clears the frame, draws the current chapter, then sends the framebuffer to the screen.
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture, const std::vector<math::Vector3<float>>& faceNormals)
+void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture,
+    const std::vector<math::Vector3<float>>& faceNormals, const std::vector<math::Vector3<float>>& vertexNormals)
 {
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
@@ -747,7 +1115,9 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     //chapter_1();
     //chapter_4(seconds);
     //chapter_6(mesh, seconds);
-    chapter_10(mesh, meshTexture, faceNormals, seconds);
+    //chapter_10(mesh, meshTexture, faceNormals, seconds);
+    //chapter_11(mesh, meshTexture, vertexNormals, seconds);
+    chapter_12(mesh, meshTexture, vertexNormals, seconds);
 
     // Upload the framebuffer and display it.
     SDL_RenderClear(renderer);
@@ -772,6 +1142,9 @@ int main()
 
     // Les normales ne dépendent pas de la rotation : on les calcule une seule fois.
     const std::vector<math::Vector3<float>> faceNormals = chapter_10_compute_face_normals(spot);
+
+    // Chapitres 11 et 12 : une normale par sommet, moyenne des normales des faces voisines.
+    const std::vector<math::Vector3<float>> vertexNormals = chapter_11_compute_vertex_normals(spot, faceNormals);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -825,7 +1198,7 @@ int main()
             / static_cast<double>(freq));
 
         // Draw the frame (the current chapter is picked inside update_render).
-        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals);
+        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals, vertexNormals);
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -837,7 +1210,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Chapitre 10 - Lambert | %d tris | %.1f FPS (%.2f ms)", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_snprintf(title, sizeof(title), "Chapitre 12 - Clipping + %s | %d tris | %.1f FPS (%.2f ms)", CHAPTER_12_BILINEAR ? "bilineaire" : "plus proche", static_cast<int>(spot.faces.size()), fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
