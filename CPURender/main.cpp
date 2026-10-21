@@ -519,46 +519,75 @@ void chapter_6(const Mesh& mesh, float seconds)
     }
 }
 
+
 // =============
 // Chapter 8: Backface culling + Z-buffer
+// =============
 
-// Toggle these options to compare the rendering results.
+// Ces constantes permettent d'activer ou de desactiver les techniques
+// afin de comparer leur influence sur le rendu.
 constexpr bool USE_ZBUFFER = true;
 constexpr bool CULL_BACKFACES = true;
 
-// Stores the nearest normalized-device depth for each pixel.
+// Tableau qui stocke la profondeur de chaque pixel de l'ecran.
+// Une profondeur plus petite correspond a une surface plus proche
+// avec la matrice de projection utilisee ici.
 float zBuffer[WIDTH * HEIGHT];
 
+// Reinitialise toutes les profondeurs avant de dessiner une nouvelle image.
+// La valeur maximale permet a toute premiere surface visible de passer
+// le test de profondeur.
 void clear_zbuffer()
 {
-    std::fill_n(zBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+    std::fill_n(
+        zBuffer,
+        WIDTH * HEIGHT,
+        std::numeric_limits<float>::max());
 }
 
-// Returns the signed 2D area of triangle (A, B, P).
-int chapter_7_edge(int ax, int ay, int bx, int by, int px, int py)
+// Calcule l'aire orientee entre trois points A, B et P en 2D.
+// Le signe indique de quel cote de l'arete AB se trouve le point P.
+// Cette fonction sert a determiner si un pixel appartient au triangle
+// et a determiner l'orientation d'un triangle.
+int chapter_7_edge(
+    int ax, int ay,
+    int bx, int by,
+    int px, int py)
 {
-    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    return (bx - ax) * (py - ay)
+        - (by - ay) * (px - ax);
 }
 
+// Limite une valeur a un intervalle donne.
+// Ici, cette fonction permet de garder les coordonnees dans les limites
+// du framebuffer pour eviter d'acceder a des pixels hors de l'ecran.
 int chapter_7_clampi(int value, int minimum, int maximum)
 {
     return std::clamp(value, minimum, maximum);
 }
 
-// Fills a triangle and optionally keeps only the nearest fragment per pixel.
+// Remplit un triangle pixel par pixel.
+// Pour chaque pixel du triangle, la fonction calcule sa profondeur
+// et utilise eventuellement le Z-buffer pour conserver la surface visible.
 void chapter_7_draw_triangle(
     int x0, int y0, float z0,
     int x1, int y1, float z1,
     int x2, int y2, float z2,
     float zMin, float zRange)
 {
+    // Calcule l'aire orientee du triangle a partir de ses trois sommets.
     int area = chapter_7_edge(x0, y0, x1, y1, x2, y2);
+
+    // Si l'aire est nulle, le triangle est plat en 2D :
+    // il ne possede pas de surface a remplir.
     if (area == 0)
     {
         return;
     }
 
-    // Normalize winding. Depth values must follow their vertices.
+    // Normalise l'orientation du triangle pour que son aire soit positive.
+    // Les profondeurs doivent suivre les sommets correspondants :
+    // on echange donc aussi z1 et z2.
     if (area < 0)
     {
         std::swap(x1, x2);
@@ -567,145 +596,289 @@ void chapter_7_draw_triangle(
         area = -area;
     }
 
-    // Restrict rasterization to the visible framebuffer.
-    const int minX = chapter_7_clampi(std::min({ x0, x1, x2 }), 0, WIDTH - 1);
-    const int minY = chapter_7_clampi(std::min({ y0, y1, y2 }), 0, HEIGHT - 1);
-    const int maxX = chapter_7_clampi(std::max({ x0, x1, x2 }), 0, WIDTH - 1);
-    const int maxY = chapter_7_clampi(std::max({ y0, y1, y2 }), 0, HEIGHT - 1);
+    // Calcule la boite englobante du triangle.
+    // Elle represente la zone rectangulaire dans laquelle le triangle
+    // peut contenir des pixels.
+    // Les coordonnees sont limitees aux dimensions de l'ecran.
+    const int minX = chapter_7_clampi(
+        std::min({ x0, x1, x2 }), 0, WIDTH - 1);
 
+    const int minY = chapter_7_clampi(
+        std::min({ y0, y1, y2 }), 0, HEIGHT - 1);
+
+    const int maxX = chapter_7_clampi(
+        std::max({ x0, x1, x2 }), 0, WIDTH - 1);
+
+    const int maxY = chapter_7_clampi(
+        std::max({ y0, y1, y2 }), 0, HEIGHT - 1);
+
+    // Calcule l'inverse de l'aire une seule fois pour eviter
+    // de refaire la meme division pour chaque pixel.
     const float inverseArea = 1.0f / static_cast<float>(area);
 
+    // Parcourt tous les pixels de la boite englobante.
     for (int y = minY; y <= maxY; ++y)
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            const int w0 = chapter_7_edge(x1, y1, x2, y2, x, y);
-            const int w1 = chapter_7_edge(x2, y2, x0, y0, x, y);
-            const int w2 = chapter_7_edge(x0, y0, x1, y1, x, y);
+            // Calcule trois valeurs d'arete pour le pixel courant.
+            // Chaque valeur correspond a une arete du triangle.
+            const int w0 = chapter_7_edge(
+                x1, y1, x2, y2, x, y);
 
-            // The pixel is outside the triangle if any edge value is negative.
+            const int w1 = chapter_7_edge(
+                x2, y2, x0, y0, x, y);
+
+            const int w2 = chapter_7_edge(
+                x0, y0, x1, y1, x, y);
+
+            // Si une valeur est negative, le pixel est a l'exterieur
+            // du triangle. On passe alors directement au pixel suivant.
             if ((w0 | w1 | w2) < 0)
             {
                 continue;
             }
 
-            // Barycentric weights interpolate the depth at this pixel.
-            const float weight0 = static_cast<float>(w0) * inverseArea;
-            const float weight1 = static_cast<float>(w1) * inverseArea;
-            const float weight2 = static_cast<float>(w2) * inverseArea;
-            const float depth = weight0 * z0 + weight1 * z1 + weight2 * z2;
+            // Transforme les valeurs d'arete en poids barycentriques.
+            // Ces poids indiquent la contribution de chaque sommet
+            // a la profondeur du pixel courant.
+            const float weight0 =
+                static_cast<float>(w0) * inverseArea;
+
+            const float weight1 =
+                static_cast<float>(w1) * inverseArea;
+
+            const float weight2 =
+                static_cast<float>(w2) * inverseArea;
+
+            // Interpole la profondeur du pixel a partir des profondeurs
+            // des trois sommets du triangle.
+            const float depth =
+                weight0 * z0
+                + weight1 * z1
+                + weight2 * z2;
+
+            // Convertit les coordonnees 2D du pixel en indice du tableau.
+            // Le framebuffer et le Z-buffer utilisent le meme indice.
             const int index = y * WIDTH + x;
 
+            // Si le Z-buffer est active, verifie si le pixel courant
+            // est plus proche de la camera que la surface deja enregistree.
             if constexpr (USE_ZBUFFER)
             {
-                // With the current perspective matrix, smaller NDC Z is nearer.
+                // Si la profondeur est plus grande ou egale a celle
+                // deja stockee, cette surface est cachee ou a la meme
+                // profondeur : on ne dessine pas ce pixel.
                 if (depth >= zBuffer[index])
                 {
                     continue;
                 }
 
+                // La nouvelle surface est plus proche :
+                // on enregistre sa profondeur.
                 zBuffer[index] = depth;
             }
 
-            // Visualize depth as grayscale: near is bright, far is dark.
-            const float normalizedDepth = std::clamp((depth - zMin) / zRange, 0.0f, 1.0f);
-            const uint8_t intensity = static_cast<uint8_t>(
-                chapter_7_clampi(240 - static_cast<int>(normalizedDepth * 200.0f), 0, 255));
+            // Normalise la profondeur entre 0 et 1 pour produire
+            // un effet de niveaux de gris.
+            // Une surface proche sera claire et une surface eloignee sombre.
+            const float normalizedDepth =
+                std::clamp(
+                    (depth - zMin) / zRange,
+                    0.0f,
+                    1.0f);
 
-            frameBuffer[index] = Color3{ intensity, intensity, intensity, 255 }.toRGB();
+            const uint8_t intensity =
+                static_cast<uint8_t>(
+                    chapter_7_clampi(
+                        240 - static_cast<int>(
+                            normalizedDepth * 200.0f),
+                        0,
+                        255));
+
+            // Ecrit la couleur finale du pixel dans le framebuffer.
+            frameBuffer[index] =
+                Color3{
+                    intensity,
+                    intensity,
+                    intensity,
+                    255
+            }.toRGB();
         }
     }
 }
 
+
+// Stocke les informations d'un sommet apres sa projection sur l'ecran.
 struct Chapter8ProjectedVertex
 {
-    int x = 0;
-    int y = 0;
-    float depth = 0.0f;
-    bool visible = false;
+    int x = 0;          // Position horizontale sur l'ecran.
+    int y = 0;          // Position verticale sur l'ecran.
+    float depth = 0.0f; // Profondeur apres projection.
+    bool visible = false; // Indique si le sommet est devant la camera.
 };
 
-// Solid rotating OBJ mesh. Backface culling rejects triangles before rasterization.
-void chapter_8(const Mesh& mesh, float seconds, int& drawnTriangles, int& culledTriangles)
+// Effectue le rendu plein d'un modele 3D charge depuis un fichier OBJ.
+// Le Backface Culling elimine les triangles orientes a l'oppose
+// de la camera avant leur rasterisation.
+//
+// drawnTriangles compte les triangles conserves.
+// culledTriangles compte les triangles elimines par le Backface Culling.
+void chapter_8(
+    const Mesh& mesh,
+    float seconds,
+    int& drawnTriangles,
+    int& culledTriangles)
 {
-    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
-    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    // Calcule le rapport entre la largeur et la hauteur de l'ecran.
+    // Il permet de conserver les proportions lors de la projection.
+    const float aspect =
+        static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
 
+    // Convertit le champ de vision vertical de 50 degres en radians.
+    // Les fonctions mathematiques utilisent des radians.
+    const float fovY =
+        50.0f * std::numbers::pi_v<float> / 180.0f;
+
+    // Cree la matrice de projection en perspective.
+    // 0.1 et 100.0 definissent les plans proche et lointain de la camera.
     const math::Mat4<float> projection =
-        math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+        math::Mat4<float>::Perspective(
+            fovY, aspect, 0.1f, 100.0f);
 
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
-        math::Vector3<float>(0.0f, 0.0f, 3.0f),
-        math::Vector3<float>(0.0f, 0.0f, 0.0f),
-        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+    // Cree la matrice de vue.
+    // La camera est placee en (0, 0, 3), regarde l'origine
+    // et utilise l'axe Y comme direction verticale.
+    const math::Mat4<float> view =
+        math::Mat4<float>::LookAt(
+            math::Vector3<float>(0.0f, 0.0f, 3.0f),
+            math::Vector3<float>(0.0f, 0.0f, 0.0f),
+            math::Vector3<float>(0.0f, 1.0f, 0.0f));
 
-    const math::Mat4<float> model = math::Mat4<float>::Rotate(
-        math::Quaternion::FromAxisAngle(
-            math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    // Cree une rotation autour de l'axe Y.
+    // L'angle augmente avec le temps, ce qui anime le modele.
+    const math::Mat4<float> model =
+        math::Mat4<float>::Rotate(
+            math::Quaternion::FromAxisAngle(
+                math::Vector3<float>(0.0f, 1.0f, 0.0f),
+                seconds * 0.7f));
 
+    // Combine la transformation du modele et celle de la camera.
+    // Avec la convention de vecteurs utilisee ici, le modele
+    // est applique avant la transformation de vue.
     const math::Mat4<float> modelView = model * view;
-    std::vector<Chapter8ProjectedVertex> projected(mesh.vertices.size());
 
+    // Cree un tableau de sommets projetes.
+    // Chaque sommet du maillage possede une entree correspondante.
+    std::vector<Chapter8ProjectedVertex> projected(
+        mesh.vertices.size());
+
+    // Initialise les profondeurs minimale et maximale.
+    // Elles serviront a calculer les niveaux de gris.
     float zMin = std::numeric_limits<float>::max();
     float zMax = std::numeric_limits<float>::lowest();
 
+    // Parcourt tous les sommets du modele 3D.
     for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
     {
+        // Transforme le sommet dans le repere de la camera.
         const math::Vector3<float> cameraPosition =
             modelView.MultiplyPointAffine(mesh.vertices[i]);
 
-        // The camera looks along negative Z.
+        // La camera regarde dans la direction Z negative.
+        // Si -Z est trop petit, le sommet est derriere la camera
+        // ou trop proche du plan de la camera pour etre traite ici.
         if (-cameraPosition.z <= 0.0001f)
         {
             continue;
         }
 
-        // MultiplyPoint applies the perspective divide and returns NDC coordinates.
-        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPosition);
+        // Applique la projection en perspective et la division
+        // par la coordonnee homogene necessaire a la perspective.
+        // Le resultat contient les coordonnees normalisees NDC.
+        const math::Vector3<float> ndc =
+            projection.MultiplyPoint(cameraPosition);
 
-        projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
-        projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+        // Convertit la coordonnee NDC X, comprise normalement entre -1 et 1,
+        // en coordonnee horizontale sur l'ecran.
+        projected[i].x =
+            static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
+
+        // Convertit la coordonnee NDC Y en coordonnee verticale.
+        // On inverse Y car les coordonnees de l'ecran augmentent vers le bas.
+        projected[i].y =
+            static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
+
+        // Conserve la profondeur NDC pour le Z-buffer.
         projected[i].depth = ndc.z;
+
+        // Indique que ce sommet a ete traite et se trouve devant la camera.
         projected[i].visible = true;
 
+        // Met a jour les profondeurs extremes du modele projete.
         zMin = std::min(zMin, ndc.z);
         zMax = std::max(zMax, ndc.z);
     }
 
-    // Avoid division by zero for a degenerate depth range.
-    const float zRange = (zMax > zMin) ? (zMax - zMin) : 1.0f;
+    // Calcule l'etendue des profondeurs.
+    // Si toutes les profondeurs sont identiques, utilise 1 pour eviter
+    // une division par zero lors de la normalisation.
+    const float zRange =
+        (zMax > zMin) ? (zMax - zMin) : 1.0f;
 
+    // Reinitialise les compteurs pour cette image.
     drawnTriangles = 0;
     culledTriangles = 0;
 
+    // Parcourt toutes les faces triangulaires du maillage.
     for (const Face& face : mesh.faces)
     {
+        // Recupere les trois sommets de la face a partir de leurs indices.
         const Chapter8ProjectedVertex& a = projected[face.a];
         const Chapter8ProjectedVertex& b = projected[face.b];
         const Chapter8ProjectedVertex& c = projected[face.c];
 
+        // Ignore le triangle si au moins un de ses sommets n'a pas ete
+        // projete parce qu'il se trouvait derriere la camera.
         if (!a.visible || !b.visible || !c.visible)
         {
             continue;
         }
 
-        // The viewport flips Y, so front-facing triangles have negative area.
-        const int area = chapter_7_edge(a.x, a.y, b.x, b.y, c.x, c.y);
+        // Calcule l'aire orientee du triangle projete.
+        // Son signe indique l'ordre d'orientation des sommets a l'ecran.
+        const int area = chapter_7_edge(
+            a.x, a.y,
+            b.x, b.y,
+            c.x, c.y);
+
+        // Ignore les triangles degeneres ou vus exactement de profil.
         if (area == 0)
         {
-            continue; // Edge-on or degenerate triangle.
+            continue;
         }
 
+        // Si le Backface Culling est active, elimine les triangles
+        // dont l'orientation correspond a une face arriere.
+        // Le signe depend de la convention des coordonnees utilisee.
         if constexpr (CULL_BACKFACES)
         {
             if (area >= 0)
             {
+                // Compte le triangle elimine.
                 ++culledTriangles;
+
+                // Passe directement a la face suivante.
                 continue;
             }
         }
 
+        // Le triangle a passe le test d'orientation :
+        // il sera donc transmis a la fonction de rasterisation.
         ++drawnTriangles;
+
+        // Remplit le triangle et utilise le Z-buffer pour que
+        // seule la surface la plus proche soit visible pour chaque pixel.
         chapter_7_draw_triangle(
             a.x, a.y, a.depth,
             b.x, b.y, b.depth,
@@ -713,7 +886,6 @@ void chapter_8(const Mesh& mesh, float seconds, int& drawnTriangles, int& culled
             zMin, zRange);
     }
 }
-
 // =============
 // Renderer custom functions
 
