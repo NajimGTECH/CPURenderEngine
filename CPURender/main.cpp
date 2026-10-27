@@ -15,18 +15,17 @@
 #include <limits>
 #include <numbers>
 
-// ==============
-// SDL Exercices
-// ==============
 
-// =============
+
+
+
 // Screen
 
 constexpr uint16_t WIDTH = 800;
 constexpr uint16_t HEIGHT = 600;
 constexpr int CIRCLE_RAY = 200;
 
-// =============
+
 // Buffer
 
 uint32_t frameBuffer[WIDTH * HEIGHT];
@@ -41,7 +40,7 @@ void add_pixel_to_buffer(Pixel px)
     frameBuffer[px.y * WIDTH + px.x] = px.color.toRGB();
 }
 
-// =============
+
 // Math classes
 
 #pragma region Chap4 maths (deprecated)
@@ -96,7 +95,7 @@ struct Mat4
 };
 #pragma endregion
 
-// =============
+
 // Chapters
 
 void chapter_1()
@@ -394,7 +393,7 @@ void chapter_6(const Mesh& mesh, float seconds)
 }
 
 // Chapter 8: Backface culling + Z-buffer
-// =============
+
 
 // Ces constantes permettent d'activer ou de desactiver les techniques
 // afin de comparer leur influence sur le rendu.
@@ -758,7 +757,7 @@ void chapter_8(
             zMin, zRange);
     }
 }
-// =============
+
 
 // Flip to false to interpolate the UVs the naive (affine) way:
 // the texture warps and swims as the mesh turns, like on the PlayStation 1.
@@ -921,9 +920,9 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
 }
 
 
-// ============================================================
+
 // Chapitre 10 : éclairage diffus (Lambert)
-// ============================================================
+
 constexpr float CHAPTER_10_AMBIENT = 0.18f;
 
 // Calcule une normale unitaire par face dans l'espace local du modèle.
@@ -1101,9 +1100,9 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
     }
 }
 
-// ============================================================
+
 // Chapitre 11 : smooth shading (Phong) + reflets spéculaires
-// ============================================================
+
 constexpr float CHAPTER_11_SPEC_STRENGTH = 0.55f; // 0 = pas de reflet, 1 = aussi brillant que la lumière
 
 // Un sommet projeté, comme TexturedVertex, qui porte en plus sa normale (en espace monde).
@@ -1152,7 +1151,8 @@ float chapter_11_pow32(float x)
 // puis on évalue le diffus de Lambert et le spéculaire de Blinn-Phong.
 // bilinear choisit l'échantillonnage de la texture (chapitre 12).
 void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVertex vC, const Texture& meshTexture,
-    const math::Vector3<float>& light, const math::Vector3<float>& halfVector, bool bilinear)
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector, bool bilinear,
+    bool transparentPass = false, float opacity = 1.0f)
 {
     float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
     if (area == 0.f) return;
@@ -1218,13 +1218,26 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
             // Spéculaire de Blinn-Phong : maximal quand la normale pointe le long du demi-vecteur
             const float specular = chapter_11_pow32(std::max(0.0f, normal.Dot(halfVector))) * CHAPTER_11_SPEC_STRENGTH;
 
-            depthBuffer[index] = z;
+            // Opaque fragments write depth; transparent fragments only test it.
+            if (!transparentPass) depthBuffer[index] = z;
 
-            // texel * diffus, plus un reflet blanc par-dessus
             Color3 texel = bilinear ? texture::sampleBilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness + 255.0f * specular), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness + 255.0f * specular), 0, 255));
             texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness + 255.0f * specular), 0, 255));
+
+            if (transparentPass)
+            {
+                // frameBuffer uses ARGB8888 (0xAARRGGBB).
+                const uint32_t dst = frameBuffer[index];
+                const float a = std::clamp(opacity, 0.0f, 1.0f);
+                const uint8_t dr = static_cast<uint8_t>((dst >> 16) & 0xFF);
+                const uint8_t dg = static_cast<uint8_t>((dst >> 8) & 0xFF);
+                const uint8_t db = static_cast<uint8_t>(dst & 0xFF);
+                texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.r * a + dr * (1.0f - a))), 0, 255));
+                texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.g * a + dg * (1.0f - a))), 0, 255));
+                texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.b * a + db * (1.0f - a))), 0, 255));
+            }
             add_pixel_to_buffer(Pixel{ x, y, texel });
         }
     }
@@ -1296,12 +1309,17 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
     }
 }
 
-// ============================================================
+
 // Chapitre 12 : clipping sur le plan near + filtrage bilinéaire
-// ============================================================
+
 
 // Passer à false pour revenir à l'échantillonnage "plus proche voisin" (en blocs) du chapitre 9.
 constexpr bool CHAPTER_12_BILINEAR = true;
+
+// F toggles the transparent rendering pass (alpha blending, no depth writes).
+// This demo currently has one mesh, so the transparent pass renders that mesh alone.
+bool gTransparencyEnabled = false;
+constexpr float TRANSPARENT_OPACITY = 0.42f;
 
 // Distance entre la caméra et Spot. Mettre 0.4f pour entrer dans la vache :
 // la surface reste pleine jusqu'à la coupe, au lieu de perdre des triangles entiers.
@@ -1389,7 +1407,8 @@ int chapter_12_clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, co
 // Un triangle déjà clippé (entièrement devant le plan near, donc w > 0) :
 // division par w, viewport, backface culling, puis le rasterizer Phong du chapitre 11.
 void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& meshTexture,
-    const math::Vector3<float>& light, const math::Vector3<float>& halfVector)
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector,
+    bool transparentPass, float opacity)
 {
     ShadedVertex projected[3];
     for (int k = 0; k < 3; k++)
@@ -1407,7 +1426,8 @@ void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& me
     if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    chapter_11_draw_triangle_phong(projected[0], projected[1], projected[2], meshTexture, light, halfVector, CHAPTER_12_BILINEAR);
+    chapter_11_draw_triangle_phong(projected[0], projected[1], projected[2], meshTexture,
+        light, halfVector, CHAPTER_12_BILINEAR, transparentPass, opacity);
 }
 
 // Même rendu que le chapitre 11, mais le pipeline est réorganisé autour du clipping :
@@ -1416,7 +1436,8 @@ void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& me
 // Le clipping peut créer de NOUVEAUX sommets (les points de croisement), c'est pour ça que
 // la division par w ne peut plus se faire une fois par sommet du mesh.
 void chapter_12(const Mesh& mesh, const Texture& meshTexture,
-    const std::vector<math::Vector3<float>>& vertexNormals, float seconds)
+    const std::vector<math::Vector3<float>>& vertexNormals, float seconds,
+    bool transparentPass = false)
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
@@ -1448,9 +1469,23 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         clipVertices[i].normal = model.MultiplyVector(vertexNormals[i]);
     }
 
-    // 2) Par triangle
-    for (const Face& face : mesh.faces)
+    // 2) Par triangle. For transparency, sort faces back-to-front (approximation
+    // by average clip-space w); transparent fragments do not update the Z-buffer.
+    std::vector<size_t> faceOrder(mesh.faces.size());
+    for (size_t i = 0; i < faceOrder.size(); ++i) faceOrder[i] = i;
+    if (transparentPass)
     {
+        auto averageW = [&](size_t i) {
+            const Face& f = mesh.faces[i];
+            return (clipVertices[f.a].w + clipVertices[f.b].w + clipVertices[f.c].w) / 3.0f;
+            };
+        std::stable_sort(faceOrder.begin(), faceOrder.end(), [&](size_t a, size_t b) {
+            return averageW(a) > averageW(b); // farther first
+            });
+    }
+    for (const size_t faceIndex : faceOrder)
+    {
+        const Face& face = mesh.faces[faceIndex];
         ClipVertex vA = clipVertices[face.a];
         ClipVertex vB = clipVertices[face.b];
         ClipVertex vC = clipVertices[face.c];
@@ -1463,12 +1498,13 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector);
+            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector,
+                transparentPass, transparentPass ? TRANSPARENT_OPACITY : 1.0f);
         }
     }
 }
 
-// =============
+
 // Renderer custom functions
 
 // Clears the frame, draws the current chapter, then sends the framebuffer to the screen.
@@ -1486,16 +1522,23 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     //chapter_9(mesh, meshTexture, seconds);
     //chapter_10(mesh, meshTexture, faceNormals, seconds);
     //chapter_11(mesh, meshTexture, vertexNormals, seconds);
-    chapter_12(mesh, meshTexture, vertexNormals, seconds);
+    chapter_12(mesh, meshTexture, vertexNormals, seconds, gTransparencyEnabled);
 
-    // Upload the framebuffer and display it.
+    // Upload the CPU framebuffer, then draw readable UI text on top using SDL3's
+    // built-in debug font (no additional TTF dependency required).
     SDL_RenderClear(renderer);
     SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderDebugText(renderer, 12.0f, 12.0f, "3Dzavr CPU Renderer | Chapter 12");
+    SDL_RenderDebugText(renderer, 12.0f, 26.0f, gTransparencyEnabled
+        ? "Pass: TRANSPARENT | alpha = 0.42 | press T to switch"
+        : "Pass: OPAQUE | press T to switch to transparency");
+    SDL_RenderDebugText(renderer, 12.0f, 40.0f, "ESC: quit");
     SDL_RenderPresent(renderer);
 }
 
-// =============
+
 // Main function
 
 int main()
@@ -1558,6 +1601,10 @@ int main()
                 {
                     isRunning = false;
                 }
+                else if (event.key.key == SDLK_T)
+                {
+                    gTransparencyEnabled = !gTransparencyEnabled;
+                }
             }
         }
 
@@ -1579,7 +1626,9 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Chapitre 12 - Clipping + %s | %d tris | %.1f FPS (%.2f ms)", CHAPTER_12_BILINEAR ? "bilineaire" : "plus proche", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_snprintf(title, sizeof(title), "Chapitre 12 - %s | %s | %.1f FPS (%.2f ms)",
+                gTransparencyEnabled ? "Transparency" : "Opaque pass",
+                CHAPTER_12_BILINEAR ? "bilineaire" : "plus proche", fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
