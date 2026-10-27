@@ -6,6 +6,9 @@
 #include "Mat4.h"
 #include "Mesh.h"
 #include "Texture.h"
+#include "Material.h"
+#include "Light.h"
+#include "Shader.h"
 
 #include <stdlib.h>
 #include <iostream>
@@ -1314,6 +1317,7 @@ struct ClipVertex
     float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f; // position en clip space
     UV uv;                                        // coordonnée de texture
     math::Vector3<float> normal;                  // normale en espace monde
+    math::Vector3<float> worldPosition;           // position en espace monde (pour les shaders)
 };
 
 // p * M avec p = (x, y, z, 1), en gardant w : MultiplyPoint ferait déjà la division par w,
@@ -1339,6 +1343,7 @@ ClipVertex chapter_12_lerp(const ClipVertex& a, const ClipVertex& b, float t)
     result.uv.u = a.uv.u + t * (b.uv.u - a.uv.u);
     result.uv.v = a.uv.v + t * (b.uv.v - a.uv.v);
     result.normal = a.normal + (b.normal - a.normal) * t;
+    result.worldPosition = a.worldPosition + (b.worldPosition - a.worldPosition) * t;
     return result;
 }
 
@@ -1468,12 +1473,251 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
     }
 }
 
+// ============================================================
+// Semaine 2 : Shaders et Materials (inspiré de 3dzavr)
+// ============================================================
+// Jusqu'ici l'éclairage était écrit en dur dans chaque rasterizer.
+// Maintenant le rasterizer interpole seulement les attributs (position, normale, UV) et appelle
+// shader::shade pour chaque pixel. Le Material (chargé depuis un .mtl) choisit l'équation
+// d'éclairage, et les lumières (soleil, ampoule, projecteur) sont de simples données.
+
+// Touches 1, 2 et 3 : allument / éteignent chaque lumière pour voir ce qu'elle apporte.
+bool gSunLightOn = true;
+bool gPointLightOn = true;
+bool gSpotLightOn = true;
+
+// Un sommet projeté, comme ShadedVertex, qui porte en plus sa position monde pour le shader.
+struct ShaderVertex
+{
+    int x = 0, y = 0;                   // position à l'écran
+    float z = 0.0f;                     // profondeur NDC, pour le test de profondeur
+    float invW = 0.0f;                  // 1 / w, pour l'interpolation perspective-correcte
+    UV uv;                              // coordonnée de texture de ce coin
+    math::Vector3<float> normal;        // normale en espace monde
+    math::Vector3<float> worldPosition; // position en espace monde (lumières ponctuelles, reflet)
+};
+
+// Même remplissage que le chapitre 11, mais le rasterizer ne sait plus rien de l'éclairage :
+// il fabrique un Fragment par pixel et le shader décide de sa couleur.
+void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+{
+    float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
+    if (area == 0.f) return;
+    if (area < 0.f)
+    {
+        // On échange le sommet entier, pour que tous ses attributs suivent sa position
+        std::swap(vB, vC);
+        area = -area;
+    }
+
+    const Pixel pA{ vA.x, vA.y };
+    const Pixel pB{ vB.x, vB.y };
+    const Pixel pC{ vC.x, vC.y };
+
+    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
+    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
+    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
+    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+
+    // Comme au chapitre 9 : tout attribut interpolé en perspective est pré-divisé par w,
+    // la position monde comprise.
+    const float uOverWA = vA.uv.u * vA.invW, vOverWA = vA.uv.v * vA.invW;
+    const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
+    const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
+    const math::Vector3<float> nOverWA = vA.normal * vA.invW;
+    const math::Vector3<float> nOverWB = vB.normal * vB.invW;
+    const math::Vector3<float> nOverWC = vC.normal * vC.invW;
+    const math::Vector3<float> pOverWA = vA.worldPosition * vA.invW;
+    const math::Vector3<float> pOverWB = vB.worldPosition * vB.invW;
+    const math::Vector3<float> pOverWC = vC.worldPosition * vC.invW;
+
+    for (int y = min_y; y <= max_y; y++)
+    {
+        for (int x = min_x; x <= max_x; x++)
+        {
+            const Pixel point{ x, y };
+            const float edgeA = chapter_3_edge(pB, pC, point);
+            const float edgeB = chapter_3_edge(pC, pA, point);
+            const float edgeC = chapter_3_edge(pA, pB, point);
+
+            // Hors du triangle
+            if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
+
+            const float weightA = edgeA / area;
+            const float weightB = edgeB / area;
+            const float weightC = edgeC / area;
+
+            // Test de profondeur
+            const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
+            const int index = y * WIDTH + x;
+            if (z >= depthBuffer[index]) continue;
+
+            // On mélange les attributs pré-divisés, puis on divise par le 1/w mélangé pour retrouver les vrais
+            const float invW = weightA * vA.invW + weightB * vB.invW + weightC * vC.invW;
+
+            Fragment fragment;
+            fragment.uv.u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) / invW;
+            fragment.uv.v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
+            fragment.position = (pOverWA * weightA + pOverWB * weightB + pOverWC * weightC) / invW;
+            fragment.normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
+            fragment.normal.Normalize(); // voir chapitre 11
+
+            depthBuffer[index] = z;
+            add_pixel_to_buffer(Pixel{ x, y, shader::shade(fragment, material, lights, cameraPosition) });
+        }
+    }
+}
+
+// Un triangle déjà clippé contre le plan near (chapitre 12) :
+// division par w, viewport, backface culling, puis le rasterizer à shader.
+void shader_project_and_draw(const ClipVertex triangle[3], const Material& material,
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+{
+    ShaderVertex projected[3];
+    for (int k = 0; k < 3; k++)
+    {
+        const float invW = 1.0f / triangle[k].w;
+        projected[k].x = static_cast<int>((triangle[k].x * invW + 1.0f) * 0.5f * WIDTH);
+        projected[k].y = static_cast<int>((1.0f - triangle[k].y * invW) * 0.5f * HEIGHT);
+        projected[k].z = triangle[k].z * invW;
+        projected[k].invW = invW;
+        projected[k].uv = triangle[k].uv;
+        projected[k].normal = triangle[k].normal;
+        projected[k].worldPosition = triangle[k].worldPosition;
+    }
+
+    // Backface culling (voir chapitre 9)
+    if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
+        Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
+
+    shader_draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition);
+}
+
+// Dessine un mesh placé dans le monde par sa matrice modèle, avec un material.
+// Même pipeline que le chapitre 12 (clip space -> clipping near -> raster),
+// les sommets gardent en plus leur position monde pour le shader.
+void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
+    const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+{
+    // Vecteurs lignes (p * M) : modèle, puis vue, puis projection.
+    const math::Mat4<float> modelViewProjection = model * viewProjection;
+
+    std::vector<ClipVertex> clipVertices(mesh.vertices.size());
+    for (size_t i = 0; i < mesh.vertices.size(); i++)
+    {
+        clipVertices[i] = chapter_12_to_clip_space(modelViewProjection, mesh.vertices[i]);
+        clipVertices[i].normal = model.MultiplyVector(vertexNormals[i]);
+        clipVertices[i].worldPosition = model.MultiplyPointAffine(mesh.vertices[i]);
+    }
+
+    for (const Face& face : mesh.faces)
+    {
+        ClipVertex vA = clipVertices[face.a];
+        ClipVertex vB = clipVertices[face.b];
+        ClipVertex vC = clipVertices[face.c];
+
+        vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
+        vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
+        vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
+
+        ClipVertex clipped[6];
+        const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
+        for (int t = 0; t < triangleCount; t++)
+        {
+            shader_project_and_draw(&clipped[t * 3], material, lights, cameraPosition);
+        }
+    }
+}
+
+// Les lumières de la scène, recréées à chaque image car deux d'entre elles bougent.
+std::vector<Light> shader_make_lights(float seconds)
+{
+    std::vector<Light> lights;
+
+    if (gSunLightOn)
+    {
+        // Soleil blanc, même direction que la lumière des chapitres 10 à 12
+        Light sun;
+        sun.type = LightType::Directional;
+        sun.direction = math::Vector3<float>(-0.4f, -0.8f, -0.45f).Normalized();
+        sun.intensity = 0.8f;
+        lights.push_back(sun);
+    }
+
+    if (gPointLightOn)
+    {
+        // Ampoule orange qui tourne autour de la scène
+        Light bulb;
+        bulb.type = LightType::Point;
+        bulb.position = math::Vector3<float>(3.0f * std::cos(seconds), 0.5f, 3.0f * std::sin(seconds));
+        bulb.color = math::Vector3<float>(1.0f, 0.55f, 0.2f);
+        bulb.intensity = 5.0f;
+        lights.push_back(bulb);
+    }
+
+    if (gSpotLightOn)
+    {
+        // Projecteur bleuté au-dessus de la caméra, qui balaie la scène de gauche à droite
+        Light spot;
+        spot.type = LightType::Spot;
+        spot.position = math::Vector3<float>(0.0f, 2.5f, 4.0f);
+        const math::Vector3<float> target(2.0f * std::sin(seconds * 0.8f), -0.1f, 0.0f);
+        spot.direction = (target - spot.position).Normalized();
+        spot.color = math::Vector3<float>(0.5f, 0.75f, 1.0f);
+        spot.intensity = 20.0f;
+        spot.innerConeCos = std::cos(8.0f * std::numbers::pi_v<float> / 180.0f);
+        spot.outerConeCos = std::cos(14.0f * std::numbers::pi_v<float> / 180.0f);
+        lights.push_back(spot);
+    }
+
+    return lights;
+}
+
+// La même vache dessinée une fois par material du .mtl, sur une grille 2x2 :
+// en haut sans éclairage puis Lambert, en bas Blinn-Phong texturé puis or sans texture.
+void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
+    const std::vector<Material>& materials, float seconds)
+{
+    const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
+    const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
+    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+
+    // Caméra reculée pour voir les 4 vaches. Le shader a besoin de sa position pour les reflets.
+    const math::Vector3<float> cameraPosition(0.0f, 0.0f, 4.2f);
+    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+        cameraPosition,
+        math::Vector3<float>(0.0f, 0.0f, 0.0f),
+        math::Vector3<float>(0.0f, 1.0f, 0.0f));
+    const math::Mat4<float> viewProjection = view * projection;
+
+    const std::vector<Light> lights = shader_make_lights(seconds);
+
+    // Toutes les vaches partagent le même depth buffer : on le vide une seule fois.
+    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+
+    // Une case de la grille par material, les vaches tournent toutes ensemble.
+    const math::Vector3<float> slots[] = {
+        { -1.1f, 0.85f, 0.0f }, { 1.1f, 0.85f, 0.0f },
+        { -1.1f, -1.05f, 0.0f }, { 1.1f, -1.05f, 0.0f } };
+    const math::Quaternion spin = math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f);
+    const math::Vector3<float> scale(0.7f, 0.7f, 0.7f);
+
+    for (size_t i = 0; i < materials.size() && i < std::size(slots); i++)
+    {
+        const math::Mat4<float> model = math::Mat4<float>::TRS(slots[i], spin, scale);
+        shader_draw_mesh(mesh, vertexNormals, model, viewProjection, materials[i], lights, cameraPosition);
+    }
+}
+
 // =============
 // Renderer custom functions
 
 // Clears the frame, draws the current chapter, then sends the framebuffer to the screen.
 void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture,
-    const std::vector<math::Vector3<float>>& faceNormals, const std::vector<math::Vector3<float>>& vertexNormals)
+    const std::vector<math::Vector3<float>>& faceNormals, const std::vector<math::Vector3<float>>& vertexNormals,
+    const std::vector<Material>& materials)
 {
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
@@ -1486,7 +1730,10 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     //chapter_9(mesh, meshTexture, seconds);
     //chapter_10(mesh, meshTexture, faceNormals, seconds);
     //chapter_11(mesh, meshTexture, vertexNormals, seconds);
-    chapter_12(mesh, meshTexture, vertexNormals, seconds);
+    //chapter_12(mesh, meshTexture, vertexNormals, seconds);
+
+    // Semaine 2 : shaders et materials (touches 1, 2 et 3 pour les lumières)
+    shader_demo(mesh, vertexNormals, materials, seconds);
 
     // Upload the framebuffer and display it.
     SDL_RenderClear(renderer);
@@ -1508,6 +1755,11 @@ int main()
     Texture spotTexture;
     if (!texture::loadPng("assets/spot_texture.png", spotTexture)) return EXIT_FAILURE;
     std::cout << "Loaded spot_texture.png:\t" << spotTexture.width << "x" << spotTexture.height << " texels\n";
+
+    // Semaine 2 : un material par vache dans la démo des shaders
+    std::vector<Material> spotMaterials;
+    if (!material::loadMtl("assets/spot.mtl", spotMaterials)) return EXIT_FAILURE;
+    std::cout << "Loaded spot.mtl:\t" << spotMaterials.size() << " materials\n";
 
     // Les normales ne dépendent pas de la rotation : on les calcule une seule fois.
     const std::vector<math::Vector3<float>> faceNormals = chapter_10_compute_face_normals(spot);
@@ -1558,6 +1810,18 @@ int main()
                 {
                     isRunning = false;
                 }
+                else if (event.key.key == SDLK_1)
+                {
+                    gSunLightOn = !gSunLightOn;
+                }
+                else if (event.key.key == SDLK_2)
+                {
+                    gPointLightOn = !gPointLightOn;
+                }
+                else if (event.key.key == SDLK_3)
+                {
+                    gSpotLightOn = !gSpotLightOn;
+                }
             }
         }
 
@@ -1567,7 +1831,7 @@ int main()
             / static_cast<double>(freq));
 
         // Draw the frame (the current chapter is picked inside update_render).
-        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals, vertexNormals);
+        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals, vertexNormals, spotMaterials);
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -1579,7 +1843,8 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Chapitre 12 - Clipping + %s | %d tris | %.1f FPS (%.2f ms)", CHAPTER_12_BILINEAR ? "bilineaire" : "plus proche", static_cast<int>(spot.faces.size()), fps, ms);
+            SDL_snprintf(title, sizeof(title), "Shaders - soleil %s, ampoule %s, projecteur %s (touches 1/2/3) | %.1f FPS (%.2f ms)",
+                gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF", fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;

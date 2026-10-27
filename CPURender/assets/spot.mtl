@@ -1,0 +1,32 @@
+# Materials of the shader demo: the same cow drawn with 4 materials.
+# illum picks the shading model: 0 = unlit, 1 = Lambert, 2 = Blinn-Phong
+
+# Texture only, no lighting
+newmtl spot_unlit
+illum 0
+Kd 1 1 1
+map_Kd spot_texture.png
+
+# Texture + diffuse lighting
+newmtl spot_lambert
+illum 1
+Ka 1 1 1
+Kd 1 1 1
+map_Kd spot_texture.png
+
+# Texture + diffuse lighting + highlight
+newmtl spot_phong
+illum 2
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.6 0.6 0.6
+Ns 32
+map_Kd spot_texture.png
+
+# No texture: a shiny gold colour
+newmtl gold
+illum 2
+Ka 1 1 1
+Kd 0.75 0.6 0.23
+Ks 0.9 0.8 0.5
+Ns 64
