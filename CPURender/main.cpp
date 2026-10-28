@@ -398,19 +398,19 @@ void chapter_6(const Mesh& mesh, float seconds)
 // Chapter 8: Backface culling + Z-buffer
 
 
-// Ces constantes permettent d'activer ou de desactiver les techniques
-// afin de comparer leur influence sur le rendu.
+// These constants turn each technique on or off,
+// to compare how much each one changes the render.
 constexpr bool USE_ZBUFFER = true;
 constexpr bool CULL_BACKFACES = true;
 
-// Tableau qui stocke la profondeur de chaque pixel de l'ecran.
-// Une profondeur plus petite correspond a une surface plus proche
-// avec la matrice de projection utilisee ici.
+// Stores the depth of every pixel of the screen.
+// With the projection matrix used here, a smaller depth
+// means a closer surface.
 float zBuffer[WIDTH * HEIGHT];
 
-// Reinitialise toutes les profondeurs avant de dessiner une nouvelle image.
-// La valeur maximale permet a toute premiere surface visible de passer
-// le test de profondeur.
+// Resets every depth before drawing a new frame.
+// The maximum value lets the first visible surface
+// pass the depth test.
 void clear_zbuffer()
 {
     std::fill_n(
@@ -419,10 +419,10 @@ void clear_zbuffer()
         std::numeric_limits<float>::max());
 }
 
-// Calcule l'aire orientee entre trois points A, B et P en 2D.
-// Le signe indique de quel cote de l'arete AB se trouve le point P.
-// Cette fonction sert a determiner si un pixel appartient au triangle
-// et a determiner l'orientation d'un triangle.
+// Signed area between three 2D points A, B and P.
+// The sign tells which side of edge AB the point P is on.
+// Used to know whether a pixel is inside a triangle
+// and to find the orientation of a triangle.
 int chapter_7_edge(
     int ax, int ay,
     int bx, int by,
@@ -432,36 +432,36 @@ int chapter_7_edge(
         - (by - ay) * (px - ax);
 }
 
-// Limite une valeur a un intervalle donne.
-// Ici, cette fonction permet de garder les coordonnees dans les limites
-// du framebuffer pour eviter d'acceder a des pixels hors de l'ecran.
+// Clamps a value to a given range.
+// Here it keeps the coordinates inside the framebuffer,
+// so we never touch pixels outside the screen.
 int chapter_7_clampi(int value, int minimum, int maximum)
 {
     return std::clamp(value, minimum, maximum);
 }
 
-// Remplit un triangle pixel par pixel.
-// Pour chaque pixel du triangle, la fonction calcule sa profondeur
-// et utilise eventuellement le Z-buffer pour conserver la surface visible.
+// Fills a triangle pixel by pixel.
+// For each pixel of the triangle, computes its depth
+// and optionally uses the Z-buffer to keep only the visible surface.
 void chapter_7_draw_triangle(
     int x0, int y0, float z0,
     int x1, int y1, float z1,
     int x2, int y2, float z2,
     float zMin, float zRange)
 {
-    // Calcule l'aire orientee du triangle a partir de ses trois sommets.
+    // Signed area of the triangle, from its three vertices.
     int area = chapter_7_edge(x0, y0, x1, y1, x2, y2);
 
-    // Si l'aire est nulle, le triangle est plat en 2D :
-    // il ne possede pas de surface a remplir.
+    // A zero area means the triangle is flat in 2D:
+    // there is no surface to fill.
     if (area == 0)
     {
         return;
     }
 
-    // Normalise l'orientation du triangle pour que son aire soit positive.
-    // Les profondeurs doivent suivre les sommets correspondants :
-    // on echange donc aussi z1 et z2.
+    // Flip the triangle's orientation so its area is positive.
+    // The depths must follow their vertices,
+    // so z1 and z2 are swapped too.
     if (area < 0)
     {
         std::swap(x1, x2);
@@ -470,10 +470,10 @@ void chapter_7_draw_triangle(
         area = -area;
     }
 
-    // Calcule la boite englobante du triangle.
-    // Elle represente la zone rectangulaire dans laquelle le triangle
-    // peut contenir des pixels.
-    // Les coordonnees sont limitees aux dimensions de l'ecran.
+    // Bounding box of the triangle:
+    // the rectangle in which the triangle
+    // can cover pixels.
+    // The coordinates are clamped to the screen size.
     const int minX = chapter_7_clampi(
         std::min({ x0, x1, x2 }), 0, WIDTH - 1);
 
@@ -486,17 +486,17 @@ void chapter_7_draw_triangle(
     const int maxY = chapter_7_clampi(
         std::max({ y0, y1, y2 }), 0, HEIGHT - 1);
 
-    // Calcule l'inverse de l'aire une seule fois pour eviter
-    // de refaire la meme division pour chaque pixel.
+    // Compute 1 / area once, so we don't redo
+    // the same division for every pixel.
     const float inverseArea = 1.0f / static_cast<float>(area);
 
-    // Parcourt tous les pixels de la boite englobante.
+    // Walk every pixel of the bounding box.
     for (int y = minY; y <= maxY; ++y)
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            // Calcule trois valeurs d'arete pour le pixel courant.
-            // Chaque valeur correspond a une arete du triangle.
+            // Three edge values for the current pixel,
+            // one per edge of the triangle.
             const int w0 = chapter_7_edge(
                 x1, y1, x2, y2, x, y);
 
@@ -506,16 +506,16 @@ void chapter_7_draw_triangle(
             const int w2 = chapter_7_edge(
                 x0, y0, x1, y1, x, y);
 
-            // Si une valeur est negative, le pixel est a l'exterieur
-            // du triangle. On passe alors directement au pixel suivant.
+            // If any value is negative, the pixel is outside
+            // the triangle: skip straight to the next pixel.
             if ((w0 | w1 | w2) < 0)
             {
                 continue;
             }
 
-            // Transforme les valeurs d'arete en poids barycentriques.
-            // Ces poids indiquent la contribution de chaque sommet
-            // a la profondeur du pixel courant.
+            // Turn the edge values into barycentric weights.
+            // They tell how much each vertex contributes
+            // to the depth of the current pixel.
             const float weight0 =
                 static_cast<float>(w0) * inverseArea;
 
@@ -525,37 +525,37 @@ void chapter_7_draw_triangle(
             const float weight2 =
                 static_cast<float>(w2) * inverseArea;
 
-            // Interpole la profondeur du pixel a partir des profondeurs
-            // des trois sommets du triangle.
+            // Interpolate the pixel's depth from the depths
+            // of the triangle's three vertices.
             const float depth =
                 weight0 * z0
                 + weight1 * z1
                 + weight2 * z2;
 
-            // Convertit les coordonnees 2D du pixel en indice du tableau.
-            // Le framebuffer et le Z-buffer utilisent le meme indice.
+            // Turn the pixel's 2D coordinates into an array index.
+            // The framebuffer and the Z-buffer share the same index.
             const int index = y * WIDTH + x;
 
-            // Si le Z-buffer est active, verifie si le pixel courant
-            // est plus proche de la camera que la surface deja enregistree.
+            // With the Z-buffer on, check whether the current pixel
+            // is closer to the camera than the surface already stored.
             if constexpr (USE_ZBUFFER)
             {
-                // Si la profondeur est plus grande ou egale a celle
-                // deja stockee, cette surface est cachee ou a la meme
-                // profondeur : on ne dessine pas ce pixel.
+                // If the depth is greater than or equal to the one
+                // already stored, this surface is hidden or at the same
+                // depth: don't draw this pixel.
                 if (depth >= zBuffer[index])
                 {
                     continue;
                 }
 
-                // La nouvelle surface est plus proche :
-                // on enregistre sa profondeur.
+                // The new surface is closer:
+                // store its depth.
                 zBuffer[index] = depth;
             }
 
-            // Normalise la profondeur entre 0 et 1 pour produire
-            // un effet de niveaux de gris.
-            // Une surface proche sera claire et une surface eloignee sombre.
+            // Normalize the depth to [0, 1] to get
+            // a greyscale effect:
+            // near surfaces are bright, far surfaces are dark.
             const float normalizedDepth =
                 std::clamp(
                     (depth - zMin) / zRange,
@@ -570,7 +570,7 @@ void chapter_7_draw_triangle(
                         0,
                         255));
 
-            // Ecrit la couleur finale du pixel dans le framebuffer.
+            // Write the pixel's final colour to the framebuffer.
             frameBuffer[index] =
                 Color3{
                     intensity,
@@ -583,176 +583,176 @@ void chapter_7_draw_triangle(
 }
 
 
-// Stocke les informations d'un sommet apres sa projection sur l'ecran.
+// What we keep of a vertex once it is projected on the screen.
 struct Chapter8ProjectedVertex
 {
-    int x = 0;          // Position horizontale sur l'ecran.
-    int y = 0;          // Position verticale sur l'ecran.
-    float depth = 0.0f; // Profondeur apres projection.
-    bool visible = false; // Indique si le sommet est devant la camera.
+    int x = 0;          // Horizontal position on the screen.
+    int y = 0;          // Vertical position on the screen.
+    float depth = 0.0f; // Depth after projection.
+    bool visible = false; // True if the vertex is in front of the camera.
 };
 
-// Effectue le rendu plein d'un modele 3D charge depuis un fichier OBJ.
-// Le Backface Culling elimine les triangles orientes a l'oppose
-// de la camera avant leur rasterisation.
+// Solid render of a 3D model loaded from an OBJ file.
+// Backface culling throws away the triangles facing away
+// from the camera before they are rasterized.
 //
-// drawnTriangles compte les triangles conserves.
-// culledTriangles compte les triangles elimines par le Backface Culling.
+// drawnTriangles counts the triangles that are kept.
+// culledTriangles counts the triangles removed by backface culling.
 void chapter_8(
     const Mesh& mesh,
     float seconds,
     int& drawnTriangles,
     int& culledTriangles)
 {
-    // Calcule le rapport entre la largeur et la hauteur de l'ecran.
-    // Il permet de conserver les proportions lors de la projection.
+    // Ratio between the screen's width and height.
+    // It keeps the proportions right during the projection.
     const float aspect =
         static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
 
-    // Convertit le champ de vision vertical de 50 degres en radians.
-    // Les fonctions mathematiques utilisent des radians.
+    // Convert the 50 degree vertical field of view to radians.
+    // The math functions work in radians.
     const float fovY =
         50.0f * std::numbers::pi_v<float> / 180.0f;
 
-    // Cree la matrice de projection en perspective.
-    // 0.1 et 100.0 definissent les plans proche et lointain de la camera.
+    // Perspective projection matrix.
+    // 0.1 and 100.0 are the camera's near and far planes.
     const math::Mat4<float> projection =
         math::Mat4<float>::Perspective(
             fovY, aspect, 0.1f, 100.0f);
 
-    // Cree la matrice de vue.
-    // La camera est placee en (0, 0, 3), regarde l'origine
-    // et utilise l'axe Y comme direction verticale.
+    // View matrix.
+    // The camera sits at (0, 0, 3), looks at the origin
+    // and uses the Y axis as up.
     const math::Mat4<float> view =
         math::Mat4<float>::LookAt(
             math::Vector3<float>(0.0f, 0.0f, 3.0f),
             math::Vector3<float>(0.0f, 0.0f, 0.0f),
             math::Vector3<float>(0.0f, 1.0f, 0.0f));
 
-    // Cree une rotation autour de l'axe Y.
-    // L'angle augmente avec le temps, ce qui anime le modele.
+    // Rotation around the Y axis.
+    // The angle grows with time, which animates the model.
     const math::Mat4<float> model =
         math::Mat4<float>::Rotate(
             math::Quaternion::FromAxisAngle(
                 math::Vector3<float>(0.0f, 1.0f, 0.0f),
                 seconds * 0.7f));
 
-    // Combine la transformation du modele et celle de la camera.
-    // Avec la convention de vecteurs utilisee ici, le modele
-    // est applique avant la transformation de vue.
+    // Combine the model and camera transforms.
+    // With the vector convention used here, the model
+    // is applied before the view.
     const math::Mat4<float> modelView = model * view;
 
-    // Cree un tableau de sommets projetes.
-    // Chaque sommet du maillage possede une entree correspondante.
+    // Array of projected vertices,
+    // one entry per vertex of the mesh.
     std::vector<Chapter8ProjectedVertex> projected(
         mesh.vertices.size());
 
-    // Initialise les profondeurs minimale et maximale.
-    // Elles serviront a calculer les niveaux de gris.
+    // Minimum and maximum depths,
+    // used to compute the grey levels.
     float zMin = std::numeric_limits<float>::max();
     float zMax = std::numeric_limits<float>::lowest();
 
-    // Parcourt tous les sommets du modele 3D.
+    // Walk every vertex of the 3D model.
     for (std::size_t i = 0; i < mesh.vertices.size(); ++i)
     {
-        // Transforme le sommet dans le repere de la camera.
+        // Move the vertex into camera space.
         const math::Vector3<float> cameraPosition =
             modelView.MultiplyPointAffine(mesh.vertices[i]);
 
-        // La camera regarde dans la direction Z negative.
-        // Si -Z est trop petit, le sommet est derriere la camera
-        // ou trop proche du plan de la camera pour etre traite ici.
+        // The camera looks down negative Z.
+        // If -Z is too small, the vertex is behind the camera
+        // or too close to the camera plane to be handled here.
         if (-cameraPosition.z <= 0.0001f)
         {
             continue;
         }
 
-        // Applique la projection en perspective et la division
-        // par la coordonnee homogene necessaire a la perspective.
-        // Le resultat contient les coordonnees normalisees NDC.
+        // Apply the perspective projection and the divide
+        // by the homogeneous coordinate that perspective needs.
+        // The result holds the normalized (NDC) coordinates.
         const math::Vector3<float> ndc =
             projection.MultiplyPoint(cameraPosition);
 
-        // Convertit la coordonnee NDC X, comprise normalement entre -1 et 1,
-        // en coordonnee horizontale sur l'ecran.
+        // Convert the NDC X coordinate, normally between -1 and 1,
+        // into a horizontal screen coordinate.
         projected[i].x =
             static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
 
-        // Convertit la coordonnee NDC Y en coordonnee verticale.
-        // On inverse Y car les coordonnees de l'ecran augmentent vers le bas.
+        // Convert the NDC Y coordinate into a vertical one.
+        // Y is flipped because screen coordinates grow downwards.
         projected[i].y =
             static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
 
-        // Conserve la profondeur NDC pour le Z-buffer.
+        // Keep the NDC depth for the Z-buffer.
         projected[i].depth = ndc.z;
 
-        // Indique que ce sommet a ete traite et se trouve devant la camera.
+        // Mark this vertex as processed and in front of the camera.
         projected[i].visible = true;
 
-        // Met a jour les profondeurs extremes du modele projete.
+        // Update the extreme depths of the projected model.
         zMin = std::min(zMin, ndc.z);
         zMax = std::max(zMax, ndc.z);
     }
 
-    // Calcule l'etendue des profondeurs.
-    // Si toutes les profondeurs sont identiques, utilise 1 pour eviter
-    // une division par zero lors de la normalisation.
+    // Span of the depths.
+    // If every depth is the same, use 1 to avoid
+    // a division by zero when normalizing.
     const float zRange =
         (zMax > zMin) ? (zMax - zMin) : 1.0f;
 
-    // Reinitialise les compteurs pour cette image.
+    // Reset the counters for this frame.
     drawnTriangles = 0;
     culledTriangles = 0;
 
-    // Parcourt toutes les faces triangulaires du maillage.
+    // Walk every triangle of the mesh.
     for (const Face& face : mesh.faces)
     {
-        // Recupere les trois sommets de la face a partir de leurs indices.
+        // Fetch the face's three vertices from their indices.
         const Chapter8ProjectedVertex& a = projected[face.a];
         const Chapter8ProjectedVertex& b = projected[face.b];
         const Chapter8ProjectedVertex& c = projected[face.c];
 
-        // Ignore le triangle si au moins un de ses sommets n'a pas ete
-        // projete parce qu'il se trouvait derriere la camera.
+        // Skip the triangle if at least one of its vertices was not
+        // projected because it was behind the camera.
         if (!a.visible || !b.visible || !c.visible)
         {
             continue;
         }
 
-        // Calcule l'aire orientee du triangle projete.
-        // Son signe indique l'ordre d'orientation des sommets a l'ecran.
+        // Signed area of the projected triangle.
+        // Its sign gives the winding order of the vertices on screen.
         const int area = chapter_7_edge(
             a.x, a.y,
             b.x, b.y,
             c.x, c.y);
 
-        // Ignore les triangles degeneres ou vus exactement de profil.
+        // Skip degenerate triangles, or ones seen exactly edge-on.
         if (area == 0)
         {
             continue;
         }
 
-        // Si le Backface Culling est active, elimine les triangles
-        // dont l'orientation correspond a une face arriere.
-        // Le signe depend de la convention des coordonnees utilisee.
+        // With backface culling on, remove the triangles
+        // whose winding means they are back faces.
+        // The sign depends on the coordinate convention used.
         if constexpr (CULL_BACKFACES)
         {
             if (area >= 0)
             {
-                // Compte le triangle elimine.
+                // Count the culled triangle.
                 ++culledTriangles;
 
-                // Passe directement a la face suivante.
+                // Go straight to the next face.
                 continue;
             }
         }
 
-        // Le triangle a passe le test d'orientation :
-        // il sera donc transmis a la fonction de rasterisation.
+        // The triangle passed the orientation test,
+        // so it is handed to the rasterizer.
         ++drawnTriangles;
 
-        // Remplit le triangle et utilise le Z-buffer pour que
-        // seule la surface la plus proche soit visible pour chaque pixel.
+        // Fill the triangle, using the Z-buffer so that
+        // only the closest surface shows on each pixel.
         chapter_7_draw_triangle(
             a.x, a.y, a.depth,
             b.x, b.y, b.depth,
@@ -912,7 +912,7 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
 
             depthBuffer[index] = z;
 
-            // Échantillonne la texture, puis assombrit ses trois canaux RGB.
+            // Sample the texture, then darken its three RGB channels.
             Color3 texel = texture::sample(meshTexture, u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness), 0, 255));
@@ -924,12 +924,12 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
 
 
 
-// Chapitre 10 : éclairage diffus (Lambert)
+// Chapter 10: diffuse lighting (Lambert)
 
 constexpr float CHAPTER_10_AMBIENT = 0.18f;
 
-// Calcule une normale unitaire par face dans l'espace local du modèle.
-// Le produit vectoriel de deux arêtes donne une direction perpendiculaire au triangle.
+// Computes one unit normal per face, in the model's local space.
+// The cross product of two edges gives a direction perpendicular to the triangle.
 std::vector<math::Vector3<float>> chapter_10_compute_face_normals(const Mesh& mesh)
 {
     std::vector<math::Vector3<float>> normals;
@@ -961,7 +961,7 @@ std::vector<math::Vector3<float>> chapter_10_compute_face_normals(const Mesh& me
     return normals;
 }
 
-// Même pipeline que le chapitre 9, avec une luminosité plate calculée pour chaque triangle.
+// Same pipeline as chapter 9, with a flat brightness computed for each triangle.
 void chapter_10(const Mesh& mesh, const Texture& meshTexture,
     const std::vector<math::Vector3<float>>& faceNormals, float seconds)
 {
@@ -978,7 +978,7 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
         math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
     const math::Mat4<float> modelView = model * view;
 
-    // Direction de la lumière : vecteur normalisé pointant de la surface vers la lumière.
+    // Light direction: unit vector pointing from the surface towards the light.
     math::Vector3<float> light(0.4f, 0.8f, 0.45f);
     const float lightLength = std::sqrt(light.x * light.x + light.y * light.y + light.z * light.z);
     light.x /= lightLength;
@@ -1013,19 +1013,19 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
         TexturedVertex vB = projected[face.b];
         TexturedVertex vC = projected[face.c];
 
-        // Le retournement de l'axe Y à l'écran rend l'aire des faces avant négative.
-        // Une aire positive indique une face arrière : on ne la dessine pas.
+        // The Y flip of the screen makes the area of front faces negative.
+        // A positive area means a back face: don't draw it.
         if (chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y }) >= 0.0f) continue;
 
         vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
         vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
         vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
 
-        // La matrice modèle ne fait ici qu'une rotation : elle transforme la normale
-        // de l'espace local vers l'espace monde sans changer sa longueur.
+        // The model matrix is only a rotation here: it moves the normal
+        // from local space to world space without changing its length.
         const math::Vector3<float> normal = model.MultiplyPointAffine(faceNormals[faceIndex]);
         float diffuse = normal.x * light.x + normal.y * light.y + normal.z * light.z;
-        diffuse = std::max(0.0f, diffuse); // Une face tournée à l'opposé de la lumière ne reçoit pas de lumière diffuse.
+        diffuse = std::max(0.0f, diffuse); // A face turned away from the light gets no diffuse light.
         const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;
 
         chapter_10_draw_triangle_lit(vA, vB, vC, meshTexture, brightness);
@@ -1104,23 +1104,23 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
 }
 
 
-// Chapitre 11 : smooth shading (Phong) + reflets spéculaires
+// Chapter 11: smooth shading (Phong) + specular highlights
 
-constexpr float CHAPTER_11_SPEC_STRENGTH = 0.55f; // 0 = pas de reflet, 1 = aussi brillant que la lumière
+constexpr float CHAPTER_11_SPEC_STRENGTH = 0.55f; // 0 = no highlight, 1 = as bright as the light
 
-// Un sommet projeté, comme TexturedVertex, qui porte en plus sa normale (en espace monde).
+// A projected vertex, like TexturedVertex, that also carries its normal (in world space).
 struct ShadedVertex
 {
-    int x = 0, y = 0;            // position à l'écran
-    float z = 0.0f;              // profondeur NDC, pour le test de profondeur
-    float invW = 0.0f;           // 1 / w, pour l'interpolation perspective-correcte
-    UV uv;                       // coordonnée de texture de ce coin
-    math::Vector3<float> normal; // normale du sommet, déjà tournée en espace monde
+    int x = 0, y = 0;            // screen position
+    float z = 0.0f;              // NDC depth, for the depth test
+    float invW = 0.0f;           // 1 / w, for perspective-correct interpolation
+    UV uv;                       // texture coordinate of this corner
+    math::Vector3<float> normal; // vertex normal, already rotated into world space
 };
 
-// Une normale par SOMMET : la somme des normales des faces qui le touchent, normalisée.
-// Deux triangles voisins partagent ainsi la même normale sur leurs coins communs :
-// la normale interpolée ne saute plus d'un triangle à l'autre, les facettes disparaissent.
+// One normal per VERTEX: the sum of the normals of the faces touching it, normalized.
+// Two neighbouring triangles then share the same normal on their common corners:
+// the interpolated normal no longer jumps from one triangle to the next, and the facets disappear.
 std::vector<math::Vector3<float>> chapter_11_compute_vertex_normals(const Mesh& mesh,
     const std::vector<math::Vector3<float>>& faceNormals)
 {
@@ -1138,8 +1138,8 @@ std::vector<math::Vector3<float>> chapter_11_compute_vertex_normals(const Mesh& 
     return normals;
 }
 
-// x^32 en 5 multiplications (x^2, x^4, x^8, x^16, x^32), bien moins cher que std::pow dans la boucle par pixel.
-// La brillance (shininess) est donc fixée à 32.
+// x^32 in 5 multiplications (x^2, x^4, x^8, x^16, x^32), much cheaper than std::pow in the per-pixel loop.
+// The shininess is therefore fixed at 32.
 float chapter_11_pow32(float x)
 {
     const float x2 = x * x;
@@ -1149,19 +1149,18 @@ float chapter_11_pow32(float x)
     return x16 * x16;
 }
 
-// Même remplissage que le chapitre 9, mais l'éclairage est calculé à chaque PIXEL (Phong) :
-// la normale est interpolée (perspective-correcte, comme les UV), re-normalisée,
-// puis on évalue le diffus de Lambert et le spéculaire de Blinn-Phong.
-// bilinear choisit l'échantillonnage de la texture (chapitre 12).
+// Same fill as chapter 9, but the lighting is computed for every PIXEL (Phong):
+// the normal is interpolated (perspective-correct, like the UVs), re-normalized,
+// then we evaluate Lambert diffuse and Blinn-Phong specular.
+// bilinear picks the texture sampling (chapter 12).
 void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVertex vC, const Texture& meshTexture,
-    const math::Vector3<float>& light, const math::Vector3<float>& halfVector, bool bilinear,
-    bool transparentPass = false, float opacity = 1.0f)
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector, bool bilinear)
 {
     float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
     if (area == 0.f) return;
     if (area < 0.f)
     {
-        // On échange le sommet entier, pour que sa profondeur, son UV et sa normale suivent sa position
+        // Swap the whole vertex, so its depth, UV and normal follow its position
         std::swap(vB, vC);
         area = -area;
     }
@@ -1175,8 +1174,8 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
     const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
     const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
 
-    // Comme au chapitre 9 : tout attribut interpolé en perspective est pré-divisé par w,
-    // les normales comprises.
+    // Like in chapter 9: every attribute interpolated under perspective is pre-divided by w,
+    // normals included.
     const float uOverWA = vA.uv.u * vA.invW, vOverWA = vA.uv.v * vA.invW;
     const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
     const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
@@ -1193,14 +1192,14 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
             const float edgeB = chapter_3_edge(pC, pA, point);
             const float edgeC = chapter_3_edge(pA, pB, point);
 
-            // Hors du triangle
+            // Outside the triangle
             if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
 
             const float weightA = edgeA / area;
             const float weightB = edgeB / area;
             const float weightC = edgeC / area;
 
-            // Test de profondeur
+            // Depth test
             const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
             const int index = y * WIDTH + x;
             if (z >= depthBuffer[index]) continue;
@@ -1209,44 +1208,31 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
             const float u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) / invW;
             const float v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
 
-            // La moyenne de vecteurs unitaires n'est pas unitaire (elle "s'affaisse" vers le centre) :
-            // on re-normalise, car les produits scalaires de l'éclairage supposent une normale unitaire.
+            // An average of unit vectors is not unit length (it "sags" towards the centre):
+            // re-normalize it, because the lighting dot products expect a unit normal.
             math::Vector3<float> normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
             normal.Normalize();
 
-            // Diffus (chapitre 10), mais par pixel
+            // Diffuse (chapter 10), but per pixel
             const float diffuse = std::max(0.0f, normal.Dot(light));
             const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;
 
-            // Spéculaire de Blinn-Phong : maximal quand la normale pointe le long du demi-vecteur
+            // Blinn-Phong specular: strongest when the normal points along the half vector
             const float specular = chapter_11_pow32(std::max(0.0f, normal.Dot(halfVector))) * CHAPTER_11_SPEC_STRENGTH;
 
-            // Opaque fragments write depth; transparent fragments only test it.
-            if (!transparentPass) depthBuffer[index] = z;
+            depthBuffer[index] = z;
 
+            // texel * diffuse, plus a white highlight on top
             Color3 texel = bilinear ? texture::sampleBilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness + 255.0f * specular), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness + 255.0f * specular), 0, 255));
             texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness + 255.0f * specular), 0, 255));
-
-            if (transparentPass)
-            {
-                // frameBuffer uses ARGB8888 (0xAARRGGBB).
-                const uint32_t dst = frameBuffer[index];
-                const float a = std::clamp(opacity, 0.0f, 1.0f);
-                const uint8_t dr = static_cast<uint8_t>((dst >> 16) & 0xFF);
-                const uint8_t dg = static_cast<uint8_t>((dst >> 8) & 0xFF);
-                const uint8_t db = static_cast<uint8_t>(dst & 0xFF);
-                texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.r * a + dr * (1.0f - a))), 0, 255));
-                texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.g * a + dg * (1.0f - a))), 0, 255));
-                texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(texel.b * a + db * (1.0f - a))), 0, 255));
-            }
             add_pixel_to_buffer(Pixel{ x, y, texel });
         }
     }
 }
 
-// Même pipeline que le chapitre 10, avec une normale par sommet et un éclairage par pixel.
+// Same pipeline as chapter 10, with one normal per vertex and per-pixel lighting.
 void chapter_11(const Mesh& mesh, const Texture& meshTexture,
     const std::vector<math::Vector3<float>>& vertexNormals, float seconds)
 {
@@ -1263,11 +1249,11 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
         math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
     const math::Mat4<float> modelView = model * view;
 
-    // Même lumière qu'au chapitre 10.
+    // Same light as in chapter 10.
     const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
 
-    // La caméra est en z = 3 et regarde l'origine : depuis la surface, l'oeil est à peu près en +Z.
-    // On garde cette direction constante, donc le demi-vecteur H = normalize(L + V) se calcule une fois par image.
+    // The camera is at z = 3 looking at the origin: seen from the surface, the eye is roughly towards +Z.
+    // We keep that direction constant, so the half vector H = normalize(L + V) is computed once per frame.
     const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
     const math::Vector3<float> halfVector = (light + viewDirection).Normalized();
 
@@ -1288,7 +1274,7 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
         projected[i].z = ndc.z;
         projected[i].invW = 1.0f / w;
 
-        // La normale est une direction : on la tourne avec la matrice modèle, sans translation.
+        // The normal is a direction: rotate it with the model matrix, without translation.
         projected[i].normal = model.MultiplyVector(vertexNormals[i]);
         visible[i] = true;
     }
@@ -1301,7 +1287,7 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
         ShadedVertex vB = projected[face.b];
         ShadedVertex vC = projected[face.c];
 
-        // Backface culling (voir chapitre 9)
+        // Backface culling (see chapter 9)
         if (chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y }) >= 0.0f) continue;
 
         vA.uv = (face.uvA >= 0) ? mesh.uvs[face.uvA] : UV{};
@@ -1313,33 +1299,28 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
 }
 
 
-// Chapitre 12 : clipping sur le plan near + filtrage bilinéaire
+// Chapter 12: clipping against the near plane + bilinear filtering
 
 
-// Passer à false pour revenir à l'échantillonnage "plus proche voisin" (en blocs) du chapitre 9.
+// Set to false to go back to the blocky "nearest neighbour" sampling of chapter 9.
 constexpr bool CHAPTER_12_BILINEAR = true;
 
-// F toggles the transparent rendering pass (alpha blending, no depth writes).
-// This demo currently has one mesh, so the transparent pass renders that mesh alone.
-bool gTransparencyEnabled = false;
-constexpr float TRANSPARENT_OPACITY = 0.42f;
-
-// Distance entre la caméra et Spot. Mettre 0.4f pour entrer dans la vache :
-// la surface reste pleine jusqu'à la coupe, au lieu de perdre des triangles entiers.
+// Distance between the camera and Spot. Set it to 0.4f to go inside the cow:
+// the surface stays solid right up to the cut, instead of losing whole triangles.
 constexpr float CHAPTER_12_CAMERA_DISTANCE = 3.0f;
 
-// Un sommet en clip space (après la projection, AVANT la division par w),
-// avec tous les attributs que le clipping doit interpoler et dont le rasterizer a besoin ensuite.
+// A vertex in clip space (after the projection, BEFORE the divide by w),
+// with every attribute the clipping must interpolate and the rasterizer needs afterwards.
 struct ClipVertex
 {
-    float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f; // position en clip space
-    UV uv;                                        // coordonnée de texture
-    math::Vector3<float> normal;                  // normale en espace monde
-    math::Vector3<float> worldPosition;           // position en espace monde (pour les shaders)
+    float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f; // clip space position
+    UV uv;                                        // texture coordinate
+    math::Vector3<float> normal;                  // world space normal
+    math::Vector3<float> worldPosition;           // world space position (for the shaders)
 };
 
-// p * M avec p = (x, y, z, 1), en gardant w : MultiplyPoint ferait déjà la division par w,
-// et c'est justement ce qu'on veut éviter tant que le triangle n'est pas clippé.
+// p * M with p = (x, y, z, 1), keeping w: MultiplyPoint would already divide by w,
+// which is exactly what we must avoid until the triangle is clipped.
 ClipVertex chapter_12_to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p)
 {
     ClipVertex vertex;
@@ -1350,7 +1331,7 @@ ClipVertex chapter_12_to_clip_space(const math::Mat4<float>& matrix, const math:
     return vertex;
 }
 
-// Interpole TOUS les attributs : a * (1 - t) + b * t.
+// Interpolates ALL the attributes: a * (1 - t) + b * t.
 ClipVertex chapter_12_lerp(const ClipVertex& a, const ClipVertex& b, float t)
 {
     ClipVertex result;
@@ -1365,25 +1346,25 @@ ClipVertex chapter_12_lerp(const ClipVertex& a, const ClipVertex& b, float t)
     return result;
 }
 
-// Distance signée au plan near, en unités du clip space. Positive = devant le plan near (on garde).
-// Devant le near <=> z / w >= -1 <=> z + w >= 0 : le test marche sans diviser par w.
+// Signed distance to the near plane, in clip space units. Positive = in front of the near plane (kept).
+// In front of near <=> z / w >= -1 <=> z + w >= 0: the test works without dividing by w.
 float chapter_12_near_distance(const ClipVertex& vertex)
 {
     return vertex.z + vertex.w;
 }
 
-// Clipping de Sutherland-Hodgman d'un triangle contre le plan near.
-// On parcourt les arêtes A->B, B->C, C->A et pour chacune on émet :
-//  - les deux bouts devant       -> le bout B
-//  - A devant, B derrière (sort) -> le point de croisement
-//  - A derrière, B devant (entre)-> le point de croisement, puis B
-//  - les deux derrière           -> rien
-// Le polygone obtenu a 0, 3 ou 4 sommets ; un quad est découpé en 2 triangles (0,1,2) et (0,2,3).
-// Écrit 0, 3 ou 6 sommets dans out et retourne le nombre de triangles (0, 1 ou 2).
+// Sutherland-Hodgman clipping of a triangle against the near plane.
+// We walk the edges A->B, B->C, C->A and for each one we emit:
+//  - both ends in front             -> end B
+//  - A in front, B behind (leaving) -> the crossing point
+//  - A behind, B in front (entering)-> the crossing point, then B
+//  - both behind                    -> nothing
+// The resulting polygon has 0, 3 or 4 vertices; a quad is split into 2 triangles (0,1,2) and (0,2,3).
+// Writes 0, 3 or 6 vertices to out and returns the number of triangles (0, 1 or 2).
 int chapter_12_clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6])
 {
     const ClipVertex triangle[3] = { vA, vB, vC };
-    ClipVertex polygon[4]; // un triangle coupé par UN plan donne au plus 4 sommets
+    ClipVertex polygon[4]; // a triangle cut by ONE plane gives at most 4 vertices
     int count = 0;
 
     for (int edge = 0; edge < 3; edge++)
@@ -1395,7 +1376,7 @@ int chapter_12_clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, co
         const bool aInside = distanceA >= 0.0f;
         const bool bInside = distanceB >= 0.0f;
 
-        // L'arête traverse le plan : le croisement est à la fraction t où la distance s'annule
+        // The edge crosses the plane: the crossing is at the fraction t where the distance is zero
         if (aInside != bInside) polygon[count++] = chapter_12_lerp(a, b, distanceA / (distanceA - distanceB));
         if (bInside) polygon[count++] = b;
     }
@@ -1409,11 +1390,10 @@ int chapter_12_clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, co
     return 2;
 }
 
-// Un triangle déjà clippé (entièrement devant le plan near, donc w > 0) :
-// division par w, viewport, backface culling, puis le rasterizer Phong du chapitre 11.
+// An already clipped triangle (entirely in front of the near plane, so w > 0):
+// divide by w, viewport, backface culling, then the Phong rasterizer of chapter 11.
 void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& meshTexture,
-    const math::Vector3<float>& light, const math::Vector3<float>& halfVector,
-    bool transparentPass, float opacity)
+    const math::Vector3<float>& light, const math::Vector3<float>& halfVector)
 {
     ShadedVertex projected[3];
     for (int k = 0; k < 3; k++)
@@ -1427,22 +1407,20 @@ void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& me
         projected[k].normal = triangle[k].normal;
     }
 
-    // Backface culling (voir chapitre 9)
+    // Backface culling (see chapter 9)
     if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    chapter_11_draw_triangle_phong(projected[0], projected[1], projected[2], meshTexture,
-        light, halfVector, CHAPTER_12_BILINEAR, transparentPass, opacity);
+    chapter_11_draw_triangle_phong(projected[0], projected[1], projected[2], meshTexture, light, halfVector, CHAPTER_12_BILINEAR);
 }
 
-// Même rendu que le chapitre 11, mais le pipeline est réorganisé autour du clipping :
-//  1) par sommet du mesh : seulement le passage en clip space et la normale monde (pas de division) ;
-//  2) par triangle : clipping near -> 0, 1 ou 2 triangles, puis division + viewport + culling + raster.
-// Le clipping peut créer de NOUVEAUX sommets (les points de croisement), c'est pour ça que
-// la division par w ne peut plus se faire une fois par sommet du mesh.
+// Same render as chapter 11, but the pipeline is reorganized around clipping:
+//  1) per mesh vertex: only the move to clip space and the world normal (no divide);
+//  2) per triangle: near clipping -> 0, 1 or 2 triangles, then divide + viewport + culling + raster.
+// Clipping can create NEW vertices (the crossing points), which is why
+// the divide by w can no longer be done once per mesh vertex.
 void chapter_12(const Mesh& mesh, const Texture& meshTexture,
-    const std::vector<math::Vector3<float>>& vertexNormals, float seconds,
-    bool transparentPass = false)
+    const std::vector<math::Vector3<float>>& vertexNormals, float seconds)
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
@@ -1456,7 +1434,7 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
     const math::Mat4<float> model = math::Mat4<float>::Rotate(
         math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
 
-    // Vecteurs lignes (p * M) : modèle, puis vue, puis projection.
+    // Row vectors (p * M): model, then view, then projection.
     const math::Mat4<float> modelViewProjection = model * view * projection;
 
     const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
@@ -1465,8 +1443,8 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
 
     std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
 
-    // 1) Par sommet : clip space + normale monde. Plus besoin du tableau "visible" :
-    // le clipping gère rigoureusement ce qui est derrière la caméra.
+    // 1) Per vertex: clip space + world normal. No more need for the "visible" array:
+    // clipping properly handles whatever is behind the camera.
     std::vector<ClipVertex> clipVertices(mesh.vertices.size());
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
@@ -1474,23 +1452,9 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         clipVertices[i].normal = model.MultiplyVector(vertexNormals[i]);
     }
 
-    // 2) Par triangle. For transparency, sort faces back-to-front (approximation
-    // by average clip-space w); transparent fragments do not update the Z-buffer.
-    std::vector<size_t> faceOrder(mesh.faces.size());
-    for (size_t i = 0; i < faceOrder.size(); ++i) faceOrder[i] = i;
-    if (transparentPass)
+    // 2) Per triangle
+    for (const Face& face : mesh.faces)
     {
-        auto averageW = [&](size_t i) {
-            const Face& f = mesh.faces[i];
-            return (clipVertices[f.a].w + clipVertices[f.b].w + clipVertices[f.c].w) / 3.0f;
-            };
-        std::stable_sort(faceOrder.begin(), faceOrder.end(), [&](size_t a, size_t b) {
-            return averageW(a) > averageW(b); // farther first
-            });
-    }
-    for (const size_t faceIndex : faceOrder)
-    {
-        const Face& face = mesh.faces[faceIndex];
         ClipVertex vA = clipVertices[face.a];
         ClipVertex vB = clipVertices[face.b];
         ClipVertex vC = clipVertices[face.c];
@@ -1503,47 +1467,83 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector,
-                transparentPass, transparentPass ? TRANSPARENT_OPACITY : 1.0f);
+            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector);
         }
     }
 }
 
-
 // ============================================================
-// Semaine 2 : Shaders et Materials (inspiré de 3dzavr)
+// Week 2: Shaders and Materials (inspired by 3dzavr)
 // ============================================================
-// Jusqu'ici l'éclairage était écrit en dur dans chaque rasterizer.
-// Maintenant le rasterizer interpole seulement les attributs (position, normale, UV) et appelle
-// shader::shade pour chaque pixel. Le Material (chargé depuis un .mtl) choisit l'équation
-// d'éclairage, et les lumières (soleil, ampoule, projecteur) sont de simples données.
+// Until now the lighting was hard-coded in each rasterizer.
+// Now the rasterizer only interpolates the attributes (position, normal, UV) and calls
+// shader::shade for each pixel. The Material (loaded from a .mtl) picks the lighting
+// equation, and the lights (sun, bulb, spotlight) are plain data.
 
-// Touches 1, 2 et 3 : allument / éteignent chaque lumière pour voir ce qu'elle apporte.
+// Keys 1, 2 and 3: turn each light on / off to see what it brings.
 bool gSunLightOn = true;
 bool gPointLightOn = true;
 bool gSpotLightOn = true;
 
-// Un sommet projeté, comme ShadedVertex, qui porte en plus sa position monde pour le shader.
+// Key T: makes every cow see-through (alpha blending, no depth writes).
+// A material can also be transparent on its own with "d" below 1 in the .mtl:
+// T only caps every opacity at TRANSPARENT_OPACITY.
+bool gTransparencyEnabled = false;
+constexpr float TRANSPARENT_OPACITY = 0.42f;
+
+// A projected vertex, like ShadedVertex, that also carries its world position for the shader.
 struct ShaderVertex
 {
-    int x = 0, y = 0;                   // position à l'écran
-    float z = 0.0f;                     // profondeur NDC, pour le test de profondeur
-    float invW = 0.0f;                  // 1 / w, pour l'interpolation perspective-correcte
-    UV uv;                              // coordonnée de texture de ce coin
-    math::Vector3<float> normal;        // normale en espace monde
-    math::Vector3<float> worldPosition; // position en espace monde (lumières ponctuelles, reflet)
+    int x = 0, y = 0;                   // screen position
+    float z = 0.0f;                     // NDC depth, for the depth test
+    float invW = 0.0f;                  // 1 / w, for perspective-correct interpolation
+    UV uv;                              // texture coordinate of this corner
+    math::Vector3<float> normal;        // world space normal
+    math::Vector3<float> worldPosition; // world space position (point lights, highlight)
 };
 
-// Même remplissage que le chapitre 11, mais le rasterizer ne sait plus rien de l'éclairage :
-// il fabrique un Fragment par pixel et le shader décide de sa couleur.
+// "Over" blending: lays a colour on top of what is already in the framebuffer.
+// result = color * opacity + background * (1 - opacity)
+Color3 shader_blend_over_framebuffer(const Color3& color, int index, float opacity)
+{
+    // frameBuffer uses ARGB8888 (0xAARRGGBB).
+    const uint32_t background = frameBuffer[index];
+    const float a = std::clamp(opacity, 0.0f, 1.0f);
+    const uint8_t backgroundR = static_cast<uint8_t>((background >> 16) & 0xFF);
+    const uint8_t backgroundG = static_cast<uint8_t>((background >> 8) & 0xFF);
+    const uint8_t backgroundB = static_cast<uint8_t>(background & 0xFF);
+
+    return Color3{
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.r * a + backgroundR * (1.0f - a))), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.g * a + backgroundG * (1.0f - a))), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.b * a + backgroundB * (1.0f - a))), 0, 255))
+    };
+}
+
+// Top-left fill rule: a pixel lying exactly on an edge shared by two triangles must be drawn by only ONE of them.
+// Opaque triangles don't mind (the second one fails the depth test), but a transparent pixel
+// blended twice shows up as a bright line along every edge of the mesh.
+// The rule keeps the pixels on the top and left edges of a triangle and drops the others.
+// With the winding left after the swap (clockwise on screen, Y down), a "top" edge is horizontal
+// and goes right, a "left" edge goes up.
+bool shader_is_top_left_edge(const Pixel& from, const Pixel& to)
+{
+    const int dx = to.x - from.x;
+    const int dy = to.y - from.y;
+    return dy < 0 || (dy == 0 && dx > 0);
+}
+
+// Same fill as chapter 11, but the rasterizer no longer knows anything about lighting:
+// it builds one Fragment per pixel and the shader decides its colour.
+// opacity < 1 blends the pixel over the framebuffer instead of replacing it.
 void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
     float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
     if (area == 0.f) return;
     if (area < 0.f)
     {
-        // On échange le sommet entier, pour que tous ses attributs suivent sa position
+        // Swap the whole vertex, so all its attributes follow its position
         std::swap(vB, vC);
         area = -area;
     }
@@ -1557,8 +1557,15 @@ void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
     const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
 
-    // Comme au chapitre 9 : tout attribut interpolé en perspective est pré-divisé par w,
-    // la position monde comprise.
+    const bool transparent = opacity < 1.0f;
+
+    // Each edge value below is named after the vertex facing that edge (edgeA is edge B->C)
+    const bool topLeftA = shader_is_top_left_edge(pB, pC);
+    const bool topLeftB = shader_is_top_left_edge(pC, pA);
+    const bool topLeftC = shader_is_top_left_edge(pA, pB);
+
+    // Like in chapter 9: every attribute interpolated under perspective is pre-divided by w,
+    // the world position included.
     const float uOverWA = vA.uv.u * vA.invW, vOverWA = vA.uv.v * vA.invW;
     const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
     const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
@@ -1578,19 +1585,20 @@ void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
             const float edgeB = chapter_3_edge(pC, pA, point);
             const float edgeC = chapter_3_edge(pA, pB, point);
 
-            // Hors du triangle
+            // Outside the triangle, or on an edge that belongs to the neighbouring triangle
             if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
+            if ((edgeA == 0 && !topLeftA) || (edgeB == 0 && !topLeftB) || (edgeC == 0 && !topLeftC)) continue;
 
             const float weightA = edgeA / area;
             const float weightB = edgeB / area;
             const float weightC = edgeC / area;
 
-            // Test de profondeur
+            // Depth test
             const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
             const int index = y * WIDTH + x;
             if (z >= depthBuffer[index]) continue;
 
-            // On mélange les attributs pré-divisés, puis on divise par le 1/w mélangé pour retrouver les vrais
+            // Blend the pre-divided attributes, then divide by the blended 1/w to get the real ones back
             const float invW = weightA * vA.invW + weightB * vB.invW + weightC * vC.invW;
 
             Fragment fragment;
@@ -1598,18 +1606,29 @@ void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
             fragment.uv.v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
             fragment.position = (pOverWA * weightA + pOverWB * weightB + pOverWC * weightC) / invW;
             fragment.normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
-            fragment.normal.Normalize(); // voir chapitre 11
+            fragment.normal.Normalize(); // see chapter 11
 
-            depthBuffer[index] = z;
-            add_pixel_to_buffer(Pixel{ x, y, shader::shade(fragment, material, lights, cameraPosition) });
+            Color3 color = shader::shade(fragment, material, lights, cameraPosition);
+
+            if (transparent)
+            {
+                // Transparent fragments only TEST the depth, they don't write it:
+                // a see-through surface must not hide what gets drawn after it.
+                color = shader_blend_over_framebuffer(color, index, opacity);
+            }
+            else
+            {
+                depthBuffer[index] = z;
+            }
+            add_pixel_to_buffer(Pixel{ x, y, color });
         }
     }
 }
 
-// Un triangle déjà clippé contre le plan near (chapitre 12) :
-// division par w, viewport, backface culling, puis le rasterizer à shader.
+// An already clipped triangle (against the near plane, chapter 12):
+// divide by w, viewport, backface culling, then the shader rasterizer.
 void shader_project_and_draw(const ClipVertex triangle[3], const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
     ShaderVertex projected[3];
     for (int k = 0; k < 3; k++)
@@ -1624,21 +1643,22 @@ void shader_project_and_draw(const ClipVertex triangle[3], const Material& mater
         projected[k].worldPosition = triangle[k].worldPosition;
     }
 
-    // Backface culling (voir chapitre 9)
+    // Backface culling (see chapter 9)
     if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    shader_draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition);
+    shader_draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
 }
 
-// Dessine un mesh placé dans le monde par sa matrice modèle, avec un material.
-// Même pipeline que le chapitre 12 (clip space -> clipping near -> raster),
-// les sommets gardent en plus leur position monde pour le shader.
+// Draws a mesh placed in the world by its model matrix, with a material.
+// Same pipeline as chapter 12 (clip space -> near clipping -> raster),
+// the vertices also keep their world position for the shader.
+// opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.
 void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
     const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
-    // Vecteurs lignes (p * M) : modèle, puis vue, puis projection.
+    // Row vectors (p * M): model, then view, then projection.
     const math::Mat4<float> modelViewProjection = model * viewProjection;
 
     std::vector<ClipVertex> clipVertices(mesh.vertices.size());
@@ -1649,8 +1669,26 @@ void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>&
         clipVertices[i].worldPosition = model.MultiplyPointAffine(mesh.vertices[i]);
     }
 
-    for (const Face& face : mesh.faces)
+    // An opaque mesh can draw its faces in any order: the depth buffer sorts them out.
+    // A transparent one blends with what is already on screen, so its faces must go
+    // from back to front (painter's algorithm). They are sorted by the average clip space w
+    // of their corners (= distance in front of the camera): an approximation, but good enough here.
+    std::vector<size_t> faceOrder(mesh.faces.size());
+    for (size_t i = 0; i < faceOrder.size(); ++i) faceOrder[i] = i;
+    if (opacity < 1.0f)
     {
+        auto averageW = [&](size_t i) {
+            const Face& f = mesh.faces[i];
+            return (clipVertices[f.a].w + clipVertices[f.b].w + clipVertices[f.c].w) / 3.0f;
+            };
+        std::stable_sort(faceOrder.begin(), faceOrder.end(), [&](size_t a, size_t b) {
+            return averageW(a) > averageW(b); // farther first
+            });
+    }
+
+    for (const size_t faceIndex : faceOrder)
+    {
+        const Face& face = mesh.faces[faceIndex];
         ClipVertex vA = clipVertices[face.a];
         ClipVertex vB = clipVertices[face.b];
         ClipVertex vC = clipVertices[face.c];
@@ -1663,19 +1701,19 @@ void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>&
         const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            shader_project_and_draw(&clipped[t * 3], material, lights, cameraPosition);
+            shader_project_and_draw(&clipped[t * 3], material, lights, cameraPosition, opacity);
         }
     }
 }
 
-// Les lumières de la scène, recréées à chaque image car deux d'entre elles bougent.
+// The lights of the scene, rebuilt every frame because two of them move.
 std::vector<Light> shader_make_lights(float seconds)
 {
     std::vector<Light> lights;
 
     if (gSunLightOn)
     {
-        // Soleil blanc, même direction que la lumière des chapitres 10 à 12
+        // White sun, same direction as the light of chapters 10 to 12
         Light sun;
         sun.type = LightType::Directional;
         sun.direction = math::Vector3<float>(-0.4f, -0.8f, -0.45f).Normalized();
@@ -1685,7 +1723,7 @@ std::vector<Light> shader_make_lights(float seconds)
 
     if (gPointLightOn)
     {
-        // Ampoule orange qui tourne autour de la scène
+        // Orange bulb circling around the scene
         Light bulb;
         bulb.type = LightType::Point;
         bulb.position = math::Vector3<float>(3.0f * std::cos(seconds), 0.5f, 3.0f * std::sin(seconds));
@@ -1696,7 +1734,7 @@ std::vector<Light> shader_make_lights(float seconds)
 
     if (gSpotLightOn)
     {
-        // Projecteur bleuté au-dessus de la caméra, qui balaie la scène de gauche à droite
+        // Bluish spotlight above the camera, sweeping the scene from left to right
         Light spot;
         spot.type = LightType::Spot;
         spot.position = math::Vector3<float>(0.0f, 2.5f, 4.0f);
@@ -1712,8 +1750,9 @@ std::vector<Light> shader_make_lights(float seconds)
     return lights;
 }
 
-// La même vache dessinée une fois par material du .mtl, sur une grille 2x2 :
-// en haut sans éclairage puis Lambert, en bas Blinn-Phong texturé puis or sans texture.
+// The same cow drawn once per material of the .mtl, on a 2x2 grid:
+// top row unlit then Lambert, bottom row textured Blinn-Phong then untextured gold.
+// Press T and the four of them turn see-through (transparent pass).
 void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
     const std::vector<Material>& materials, float seconds)
 {
@@ -1721,7 +1760,7 @@ void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vert
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
     const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
 
-    // Caméra reculée pour voir les 4 vaches. Le shader a besoin de sa position pour les reflets.
+    // Camera pulled back to see the 4 cows. The shader needs its position for the highlights.
     const math::Vector3<float> cameraPosition(0.0f, 0.0f, 4.2f);
     const math::Mat4<float> view = math::Mat4<float>::LookAt(
         cameraPosition,
@@ -1731,20 +1770,47 @@ void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vert
 
     const std::vector<Light> lights = shader_make_lights(seconds);
 
-    // Toutes les vaches partagent le même depth buffer : on le vide une seule fois.
+    // Every cow shares the same depth buffer: clear it only once.
     std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
 
-    // Une case de la grille par material, les vaches tournent toutes ensemble.
+    // One grid cell per material, the cows all spin together.
     const math::Vector3<float> slots[] = {
         { -1.1f, 0.85f, 0.0f }, { 1.1f, 0.85f, 0.0f },
         { -1.1f, -1.05f, 0.0f }, { 1.1f, -1.05f, 0.0f } };
     const math::Quaternion spin = math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f);
     const math::Vector3<float> scale(0.7f, 0.7f, 0.7f);
 
+    struct Cow
+    {
+        math::Mat4<float> model;
+        const Material* material = nullptr;
+        float opacity = 1.0f;
+        float distanceToCamera = 0.0f; // squared, only used to sort
+    };
+
+    std::vector<Cow> cows;
     for (size_t i = 0; i < materials.size() && i < std::size(slots); i++)
     {
-        const math::Mat4<float> model = math::Mat4<float>::TRS(slots[i], spin, scale);
-        shader_draw_mesh(mesh, vertexNormals, model, viewProjection, materials[i], lights, cameraPosition);
+        Cow cow;
+        cow.model = math::Mat4<float>::TRS(slots[i], spin, scale);
+        cow.material = &materials[i];
+        cow.opacity = gTransparencyEnabled ? std::min(materials[i].opacity, TRANSPARENT_OPACITY) : materials[i].opacity;
+        cow.distanceToCamera = (slots[i] - cameraPosition).LengthSquared();
+        cows.push_back(cow);
+    }
+
+    // Draw order: every opaque cow first (they fill the depth buffer),
+    // then the transparent ones from the farthest to the closest, so each one blends over what is behind it.
+    std::stable_sort(cows.begin(), cows.end(), [](const Cow& a, const Cow& b) {
+        const bool aTransparent = a.opacity < 1.0f;
+        const bool bTransparent = b.opacity < 1.0f;
+        if (aTransparent != bTransparent) return !aTransparent;
+        return aTransparent && a.distanceToCamera > b.distanceToCamera;
+        });
+
+    for (const Cow& cow : cows)
+    {
+        shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection, *cow.material, lights, cameraPosition, cow.opacity);
     }
 }
 
@@ -1759,18 +1825,17 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
 
-    // Draw the current chapter. Chapter 12 is the default merged result.
-    // Pour revenir au chapitre 8, décommentez son appel et commentez chapter_12.
+    // Draw the current chapter. The week 2 shader demo is the default merged result.
+    // To go back to an older chapter, uncomment its call and comment out shader_demo.
     int drawnTriangles = 0;
     int culledTriangles = 0;
     //chapter_8(mesh, seconds, drawnTriangles, culledTriangles);
     //chapter_9(mesh, meshTexture, seconds);
     //chapter_10(mesh, meshTexture, faceNormals, seconds);
     //chapter_11(mesh, meshTexture, vertexNormals, seconds);
-    chapter_12(mesh, meshTexture, vertexNormals, seconds, gTransparencyEnabled);
     //chapter_12(mesh, meshTexture, vertexNormals, seconds);
 
-    // Semaine 2 : shaders et materials (touches 1, 2 et 3 pour les lumières)
+    // Week 2: shaders and materials (keys 1, 2 and 3 for the lights, T for transparency)
     shader_demo(mesh, vertexNormals, materials, seconds);
 
     // Upload the CPU framebuffer, then draw readable UI text on top using SDL3's
@@ -1779,11 +1844,18 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, nullptr, nullptr);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDebugText(renderer, 12.0f, 12.0f, "3Dzavr CPU Renderer | Chapter 12");
-    SDL_RenderDebugText(renderer, 12.0f, 26.0f, gTransparencyEnabled
-        ? "Pass: TRANSPARENT | alpha = 0.42 | press T to switch"
-        : "Pass: OPAQUE | press T to switch to transparency");
-    SDL_RenderDebugText(renderer, 12.0f, 40.0f, "ESC: quit");
+
+    char line[128];
+    SDL_RenderDebugText(renderer, 12.0f, 12.0f, "3Dzavr CPU Renderer | Shaders + Materials");
+    if (gTransparencyEnabled)
+        SDL_snprintf(line, sizeof(line), "Pass: TRANSPARENT | alpha = %.2f | press T to switch", TRANSPARENT_OPACITY);
+    else
+        SDL_snprintf(line, sizeof(line), "Pass: OPAQUE | press T to switch to transparency");
+    SDL_RenderDebugText(renderer, 12.0f, 26.0f, line);
+    SDL_snprintf(line, sizeof(line), "Lights: 1 sun %s | 2 bulb %s | 3 spot %s",
+        gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF");
+    SDL_RenderDebugText(renderer, 12.0f, 40.0f, line);
+    SDL_RenderDebugText(renderer, 12.0f, 54.0f, "ESC: quit");
     SDL_RenderPresent(renderer);
 }
 
@@ -1801,15 +1873,15 @@ int main()
     if (!texture::loadPng("assets/spot_texture.png", spotTexture)) return EXIT_FAILURE;
     std::cout << "Loaded spot_texture.png:\t" << spotTexture.width << "x" << spotTexture.height << " texels\n";
 
-    // Semaine 2 : un material par vache dans la démo des shaders
+    // Week 2: one material per cow in the shader demo
     std::vector<Material> spotMaterials;
     if (!material::loadMtl("assets/spot.mtl", spotMaterials)) return EXIT_FAILURE;
     std::cout << "Loaded spot.mtl:\t" << spotMaterials.size() << " materials\n";
 
-    // Les normales ne dépendent pas de la rotation : on les calcule une seule fois.
+    // The normals don't depend on the rotation: compute them only once.
     const std::vector<math::Vector3<float>> faceNormals = chapter_10_compute_face_normals(spot);
 
-    // Chapitres 11 et 12 : une normale par sommet, moyenne des normales des faces voisines.
+    // Chapters 11 and 12: one normal per vertex, the average of the neighbouring face normals.
     const std::vector<math::Vector3<float>> vertexNormals = chapter_11_compute_vertex_normals(spot, faceNormals);
 
     // Init
@@ -1819,7 +1891,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    SDL_Window* window = SDL_CreateWindow("Fenetre Test", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Test Window", WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
     if (window == nullptr) { SDL_Log("Window could not be created.\n"); return EXIT_FAILURE; }
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
@@ -1892,11 +1964,9 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Shaders - soleil %s, ampoule %s, projecteur %s (touches 1/2/3) | %.1f FPS (%.2f ms)",
-                gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF", fps, ms);
-            SDL_snprintf(title, sizeof(title), "Chapitre 12 - %s | %s | %.1f FPS (%.2f ms)",
-                gTransparencyEnabled ? "Transparency" : "Opaque pass",
-                CHAPTER_12_BILINEAR ? "bilineaire" : "plus proche", fps, ms);
+            SDL_snprintf(title, sizeof(title), "Shaders - sun %s, bulb %s, spot %s (keys 1/2/3) | %s (key T) | %.1f FPS (%.2f ms)",
+                gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF",
+                gTransparencyEnabled ? "transparent" : "opaque", fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
