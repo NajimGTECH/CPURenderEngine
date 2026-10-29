@@ -150,7 +150,7 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClCompile Include="Particle.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="BaseComponent.h" />
+    <ClInclude Include="Components.h" />
     <ClInclude Include="Color3.h" />
     <ClInclude Include="ComponentStorage.h" />
     <ClInclude Include="EntityManager.h" />

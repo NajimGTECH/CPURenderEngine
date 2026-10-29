@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "BaseComponent.h"
+#include "Components.h"
 #include "ComponentStorage.h"
 
 class EntityManager
@@ -19,7 +19,7 @@ public:
 		return static_cast<int>(m_components.size()); // represents the component id
 	}
 
-	void add_component(int entity, int componentId, const std::any& component)
+	void add_component(int entity, int componentId, const void* component)
 	{
 		m_components[componentId]->add_component(entity, component);
 	}

@@ -19,9 +19,7 @@
 #include <limits>
 #include <numbers>
 
-
-
-
+#include "EntityManager.h"
 
 // Screen
 
@@ -2043,6 +2041,22 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
 
 int main()
 {
+    // ECS
+
+    EntityManager entityManager;
+
+    int entity1 = 1;
+    int entity2 = 2;
+
+    int transformComponentId = entityManager.add_component_type<TransformComponent>();
+
+    TransformComponent entity1Transform{ 1.f, 5.f, 3.f };
+    TransformComponent entity2Transform{ 0.f, -2.f, 8.f };
+
+    entityManager.add_component(entity1, transformComponentId, (void*) &entity1Transform);
+    entityManager.add_component(entity2, transformComponentId, (void*) &entity2Transform);
+
+
     // Load the mesh and its texture once, before the loop (chapters 6 and 9)
     Mesh spot;
     if (!mesh::loadObj("assets/spot.obj", spot)) return EXIT_FAILURE;
