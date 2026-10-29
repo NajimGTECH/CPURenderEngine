@@ -9,6 +9,7 @@
 #include "Material.h"
 #include "Light.h"
 #include "Shader.h"
+#include "Particle.h"
 
 #include <stdlib.h>
 #include <iostream>
@@ -1706,6 +1707,12 @@ void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>&
     }
 }
 
+// The orange bulb circles around the scene. The fire particles follow it too.
+math::Vector3<float> shader_bulb_position(float seconds)
+{
+    return math::Vector3<float>(3.0f * std::cos(seconds), 0.5f, 3.0f * std::sin(seconds));
+}
+
 // The lights of the scene, rebuilt every frame because two of them move.
 std::vector<Light> shader_make_lights(float seconds)
 {
@@ -1726,7 +1733,7 @@ std::vector<Light> shader_make_lights(float seconds)
         // Orange bulb circling around the scene
         Light bulb;
         bulb.type = LightType::Point;
-        bulb.position = math::Vector3<float>(3.0f * std::cos(seconds), 0.5f, 3.0f * std::sin(seconds));
+        bulb.position = shader_bulb_position(seconds);
         bulb.color = math::Vector3<float>(1.0f, 0.55f, 0.2f);
         bulb.intensity = 5.0f;
         lights.push_back(bulb);
@@ -1750,11 +1757,165 @@ std::vector<Light> shader_make_lights(float seconds)
     return lights;
 }
 
+// ============================================================
+// Week 2: Pixel particles (inspired by cpu-engine)
+// ============================================================
+// A particle is a point that lives for a few seconds: emitters spawn them,
+// the physics moves them, and each one lights up a single pixel.
+// Particle.h holds the data and the simulation, the drawing is here because
+// it writes into the framebuffer and the depth buffer.
+
+// Key P: stops / restarts the emitters. The particles already alive finish their life.
+bool gParticlesOn = true;
+
+// Every particle system has its own physics, so each effect gets its own system and emitter.
+struct ParticleScene
+{
+    ParticleSystem fire;          // Rises above the orange bulb, follows it around
+    ParticleEmitter fireEmitter;
+
+    ParticleSystem fountain;      // Falls back between the bottom cows and bounces on the floor
+    ParticleEmitter fountainEmitter;
+};
+
+// Settings of the two effects, done once before the loop.
+void particles_setup(ParticleScene& scene)
+{
+    // Fire: glowing red to orange particles. The gravity points UP (hot air rises)
+    // and a strong drag quickly kills the random launch speed, so the flame narrows as it climbs.
+    particle::create(scene.fire, 20000);
+    scene.fire.physics.gravity = math::Vector3<float>(0.0f, 0.6f, 0.0f);
+    scene.fire.physics.drag = 1.5f;
+
+    ParticleEmitter& fire = scene.fireEmitter;
+    fire.blend = ParticleBlend::Intensity;
+    fire.rate = 4000.0f;
+    fire.spawnRadius = 0.06f;
+    fire.direction = math::Vector3<float>(0.0f, 1.0f, 0.0f);
+    fire.colorMin = math::Vector3<float>(1.0f, 0.1f, 0.0f);
+    fire.colorMax = math::Vector3<float>(1.0f, 0.6f, 0.1f);
+    fire.durationMin = 0.4f;
+    fire.durationMax = 1.2f;
+    fire.speedMin = 0.3f;
+    fire.speedMax = 0.8f;
+    fire.spread = 0.6f;
+    fire.seed = 1234u;
+
+    // Fountain: solid blue droplets thrown up, pulled down by the gravity,
+    // bouncing on a floor just below the bottom cows and on the walls of a box around them.
+    particle::create(scene.fountain, 20000);
+    scene.fountain.physics.gravity = math::Vector3<float>(0.0f, -4.0f, 0.0f);
+    scene.fountain.physics.drag = 0.2f;
+    scene.fountain.physics.useBounds = true;
+    scene.fountain.physics.boundsMin = math::Vector3<float>(-2.5f, -1.8f, -1.5f);
+    scene.fountain.physics.boundsMax = math::Vector3<float>(2.5f, 3.0f, 1.5f);
+    scene.fountain.physics.bounce = 0.3f;
+
+    ParticleEmitter& fountain = scene.fountainEmitter;
+    fountain.blend = ParticleBlend::Opaque;
+    fountain.rate = 1500.0f;
+    fountain.spawnRadius = 0.03f;
+    fountain.position = math::Vector3<float>(0.0f, -1.8f, 0.0f);
+    fountain.direction = math::Vector3<float>(0.0f, 1.0f, 0.0f);
+    fountain.colorMin = math::Vector3<float>(0.1f, 0.3f, 1.0f);
+    fountain.colorMax = math::Vector3<float>(0.4f, 0.8f, 1.0f);
+    fountain.durationMin = 1.5f;
+    fountain.durationMax = 2.5f;
+    fountain.speedMin = 3.0f;
+    fountain.speedMax = 3.5f;
+    fountain.spread = 0.1f;
+    fountain.seed = 5678u;
+}
+
+// Simulation step, once per frame before drawing: spawn, age, move.
+void particles_update(ParticleScene& scene, float seconds, float deltaTime)
+{
+    // The flame sits on the bulb, wherever it is in its orbit
+    scene.fireEmitter.position = shader_bulb_position(seconds);
+
+    if (gParticlesOn)
+    {
+        particle::emit(scene.fireEmitter, scene.fire, deltaTime);
+        particle::emit(scene.fountainEmitter, scene.fountain, deltaTime);
+    }
+
+    particle::update(scene.fire, deltaTime);
+    particle::update(scene.fountain, deltaTime);
+}
+
+// [0, 1] colour -> [0, 255] pixel colour, clamped: added particles quickly go past 1.
+Color3 particles_to_color3(const math::Vector3<float>& color)
+{
+    return Color3{
+        static_cast<uint8_t>(std::clamp(static_cast<int>(color.x * 255.0f), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(color.y * 255.0f), 0, 255)),
+        static_cast<uint8_t>(std::clamp(static_cast<int>(color.z * 255.0f), 0, 255))
+    };
+}
+
+// "Additive" blending: result = background + color * amount.
+// Adding light never depends on the order, so unlike the transparent cows the particles need no sorting.
+Color3 particles_blend_add(const math::Vector3<float>& color, int index, float amount)
+{
+    // frameBuffer uses ARGB8888 (0xAARRGGBB).
+    const uint32_t background = frameBuffer[index];
+    const math::Vector3<float> backgroundColor(
+        static_cast<float>((background >> 16) & 0xFF) / 255.0f,
+        static_cast<float>((background >> 8) & 0xFF) / 255.0f,
+        static_cast<float>(background & 0xFF) / 255.0f);
+
+    return particles_to_color3(backgroundColor + color * amount);
+}
+
+// Draws every particle of a system as one pixel.
+// Same projection as a mesh vertex (chapter 12), then the depth test, so the cows hide the particles behind them.
+void particles_draw(const ParticleSystem& system, const math::Mat4<float>& viewProjection)
+{
+    for (const Particle& particle : system.particles)
+    {
+        // A particle is a single point: no clipping needed, it is either on screen or not.
+        const ClipVertex clip = chapter_12_to_clip_space(viewProjection, particle.position);
+        if (clip.w <= 0.0001f) continue; // behind the camera
+
+        const float invW = 1.0f / clip.w;
+        const float ndcX = clip.x * invW;
+        const float ndcY = clip.y * invW;
+        const float z = clip.z * invW;
+        if (ndcX < -1.0f || ndcX > 1.0f || ndcY < -1.0f || ndcY > 1.0f) continue; // outside the window
+        if (z < -1.0f || z > 1.0f) continue;                                        // before near or after far
+
+        // ndc = 1 lands exactly on WIDTH or HEIGHT, one pixel past the last one: check the pixel too
+        const int x = static_cast<int>((ndcX + 1.0f) * 0.5f * WIDTH);
+        const int y = static_cast<int>((1.0f - ndcY) * 0.5f * HEIGHT);
+        if (x >= WIDTH || y >= HEIGHT) continue;
+        const int index = y * WIDTH + x;
+        if (z >= depthBuffer[index]) continue;
+
+        if (particle.blend == ParticleBlend::Intensity)
+        {
+            // Fades out with age. Squared, so it stays bright most of its life and dies off quickly at the end.
+            float fade = particle::lifeLeft(particle);
+            fade *= fade;
+
+            // Like the transparent cows: test the depth, don't write it,
+            // so the glowing particles behind this one still add their light.
+            add_pixel_to_buffer(Pixel{ x, y, particles_blend_add(particle.color, index, fade) });
+        }
+        else
+        {
+            // A solid particle hides what is behind it, like an opaque triangle
+            depthBuffer[index] = z;
+            add_pixel_to_buffer(Pixel{ x, y, particles_to_color3(particle.color) });
+        }
+    }
+}
+
 // The same cow drawn once per material of the .mtl, on a 2x2 grid:
 // top row unlit then Lambert, bottom row textured Blinn-Phong then untextured gold.
 // Press T and the four of them turn see-through (transparent pass).
+// The particles are drawn between the opaque and the transparent pass.
 void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
-    const std::vector<Material>& materials, float seconds)
+    const std::vector<Material>& materials, const ParticleScene& particles, float seconds)
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
@@ -1808,8 +1969,22 @@ void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vert
         return aTransparent && a.distanceToCamera > b.distanceToCamera;
         });
 
+    // Opaque pass: fills the depth buffer
     for (const Cow& cow : cows)
     {
+        if (cow.opacity < 1.0f) continue;
+        shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection, *cow.material, lights, cameraPosition, cow.opacity);
+    }
+
+    // Particle pass: after the opaque cows so they can hide the particles behind them,
+    // before the transparent ones so the particles show through them.
+    particles_draw(particles.fire, viewProjection);
+    particles_draw(particles.fountain, viewProjection);
+
+    // Transparent pass: already sorted from back to front
+    for (const Cow& cow : cows)
+    {
+        if (cow.opacity >= 1.0f) continue;
         shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection, *cow.material, lights, cameraPosition, cow.opacity);
     }
 }
@@ -1820,7 +1995,7 @@ void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vert
 // Clears the frame, draws the current chapter, then sends the framebuffer to the screen.
 void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, const Mesh& mesh, const Texture& meshTexture,
     const std::vector<math::Vector3<float>>& faceNormals, const std::vector<math::Vector3<float>>& vertexNormals,
-    const std::vector<Material>& materials)
+    const std::vector<Material>& materials, const ParticleScene& particles)
 {
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
@@ -1835,8 +2010,8 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     //chapter_11(mesh, meshTexture, vertexNormals, seconds);
     //chapter_12(mesh, meshTexture, vertexNormals, seconds);
 
-    // Week 2: shaders and materials (keys 1, 2 and 3 for the lights, T for transparency)
-    shader_demo(mesh, vertexNormals, materials, seconds);
+    // Week 2: shaders, materials and particles (keys 1, 2 and 3 for the lights, T for transparency, P for particles)
+    shader_demo(mesh, vertexNormals, materials, particles, seconds);
 
     // Upload the CPU framebuffer, then draw readable UI text on top using SDL3's
     // built-in debug font (no additional TTF dependency required).
@@ -1855,7 +2030,11 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, float seconds, 
     SDL_snprintf(line, sizeof(line), "Lights: 1 sun %s | 2 bulb %s | 3 spot %s",
         gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF");
     SDL_RenderDebugText(renderer, 12.0f, 40.0f, line);
-    SDL_RenderDebugText(renderer, 12.0f, 54.0f, "ESC: quit");
+    SDL_snprintf(line, sizeof(line), "Particles: P %s | fire %d | fountain %d",
+        gParticlesOn ? "ON" : "OFF",
+        static_cast<int>(particles.fire.particles.size()), static_cast<int>(particles.fountain.particles.size()));
+    SDL_RenderDebugText(renderer, 12.0f, 54.0f, line);
+    SDL_RenderDebugText(renderer, 12.0f, 68.0f, "ESC: quit");
     SDL_RenderPresent(renderer);
 }
 
@@ -1884,6 +2063,10 @@ int main()
     // Chapters 11 and 12: one normal per vertex, the average of the neighbouring face normals.
     const std::vector<math::Vector3<float>> vertexNormals = chapter_11_compute_vertex_normals(spot, faceNormals);
 
+    // Week 2: particle systems and their emitters, they live from one frame to the next
+    ParticleScene particles;
+    particles_setup(particles);
+
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
@@ -1907,6 +2090,7 @@ int main()
     const Uint64 freq = SDL_GetPerformanceFrequency();
     const Uint64 start = SDL_GetPerformanceCounter();
     Uint64 last = start;
+    Uint64 previousFrame = start;
     double fps_accum = 0.0;
     int    fps_count = 0;
     char   title[160];
@@ -1943,16 +2127,29 @@ int main()
                 {
                     gSpotLightOn = !gSpotLightOn;
                 }
+                else if (event.key.key == SDLK_P)
+                {
+                    gParticlesOn = !gParticlesOn;
+                }
             }
         }
 
         // Elapsed time, used by the chapters to animate.
+        const Uint64 frameStart = SDL_GetPerformanceCounter();
         const float seconds = static_cast<float>(
-            static_cast<double>(SDL_GetPerformanceCounter() - start)
+            static_cast<double>(frameStart - start)
             / static_cast<double>(freq));
 
-        // Draw the frame (the current chapter is picked inside update_render).
-        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals, vertexNormals, spotMaterials);
+        // Time since the previous frame, used by the particle simulation.
+        // Capped at 0.1 s: after a long freeze (window dragged), the particles must not jump.
+        const float deltaTime = std::min(0.1f, static_cast<float>(
+            static_cast<double>(frameStart - previousFrame)
+            / static_cast<double>(freq)));
+        previousFrame = frameStart;
+
+        // Move the particles, then draw the frame (the current chapter is picked inside update_render).
+        particles_update(particles, seconds, deltaTime);
+        update_render(renderer, texture, seconds, spot, spotTexture, faceNormals, vertexNormals, spotMaterials, particles);
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -1964,9 +2161,9 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Shaders - sun %s, bulb %s, spot %s (keys 1/2/3) | %s (key T) | %.1f FPS (%.2f ms)",
+            SDL_snprintf(title, sizeof(title), "Shaders - sun %s, bulb %s, spot %s (keys 1/2/3) | %s (key T) | particles %s (key P) | %.1f FPS (%.2f ms)",
                 gSunLightOn ? "ON" : "OFF", gPointLightOn ? "ON" : "OFF", gSpotLightOn ? "ON" : "OFF",
-                gTransparencyEnabled ? "transparent" : "opaque", fps, ms);
+                gTransparencyEnabled ? "transparent" : "opaque", gParticlesOn ? "ON" : "OFF", fps, ms);
             SDL_SetWindowTitle(window, title);
             fps_accum = 0.0;
             fps_count = 0;
