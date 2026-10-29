@@ -17,6 +17,8 @@
 #include <vector>
 #include <limits>
 #include <numbers>
+#include <thread>
+#include <atomic>
 
 
 
@@ -1537,7 +1539,8 @@ bool shader_is_top_left_edge(const Pixel& from, const Pixel& to)
 // it builds one Fragment per pixel and the shader decides its colour.
 // opacity < 1 blends the pixel over the framebuffer instead of replacing it.
 void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    int tileMinX, int tileMinY, int tileMaxX, int tileMaxY)
 {
     float area = chapter_3_edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
     if (area == 0.f) return;
@@ -1552,10 +1555,10 @@ void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const Pixel pB{ vB.x, vB.y };
     const Pixel pC{ vC.x, vC.y };
 
-    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+    const int min_x = std::max(tileMinX, std::max(0, std::min({ pA.x, pB.x, pC.x })));
+    const int min_y = std::max(tileMinY, std::max(0, std::min({ pA.y, pB.y, pC.y })));
+    const int max_x = std::min(tileMaxX - 1, std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x })));
+    const int max_y = std::min(tileMaxY - 1, std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y })));
 
     const bool transparent = opacity < 1.0f;
 
@@ -1628,7 +1631,8 @@ void shader_draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
 // An already clipped triangle (against the near plane, chapter 12):
 // divide by w, viewport, backface culling, then the shader rasterizer.
 void shader_project_and_draw(const ClipVertex triangle[3], const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    int tileMinX, int tileMinY, int tileMaxX, int tileMaxY)
 {
     ShaderVertex projected[3];
     for (int k = 0; k < 3; k++)
@@ -1647,16 +1651,15 @@ void shader_project_and_draw(const ClipVertex triangle[3], const Material& mater
     if (chapter_3_edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    shader_draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
+    shader_draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity,
+        tileMinX, tileMinY, tileMaxX, tileMaxY);
 }
 
-// Draws a mesh placed in the world by its model matrix, with a material.
-// Same pipeline as chapter 12 (clip space -> near clipping -> raster),
-// the vertices also keep their world position for the shader.
-// opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.
+
 void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>& vertexNormals,
     const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    int tileMinX, int tileMinY, int tileMaxX, int tileMaxY)
 {
     // Row vectors (p * M): model, then view, then projection.
     const math::Mat4<float> modelViewProjection = model * viewProjection;
@@ -1669,10 +1672,6 @@ void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>&
         clipVertices[i].worldPosition = model.MultiplyPointAffine(mesh.vertices[i]);
     }
 
-    // An opaque mesh can draw its faces in any order: the depth buffer sorts them out.
-    // A transparent one blends with what is already on screen, so its faces must go
-    // from back to front (painter's algorithm). They are sorted by the average clip space w
-    // of their corners (= distance in front of the camera): an approximation, but good enough here.
     std::vector<size_t> faceOrder(mesh.faces.size());
     for (size_t i = 0; i < faceOrder.size(); ++i) faceOrder[i] = i;
     if (opacity < 1.0f)
@@ -1701,7 +1700,8 @@ void shader_draw_mesh(const Mesh& mesh, const std::vector<math::Vector3<float>>&
         const int triangleCount = chapter_12_clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            shader_project_and_draw(&clipped[t * 3], material, lights, cameraPosition, opacity);
+            shader_project_and_draw(&clipped[t * 3], material, lights, cameraPosition, opacity,
+                tileMinX, tileMinY, tileMaxX, tileMaxY);
         }
     }
 }
@@ -1799,19 +1799,75 @@ void shader_demo(const Mesh& mesh, const std::vector<math::Vector3<float>>& vert
         cows.push_back(cow);
     }
 
-    // Draw order: every opaque cow first (they fill the depth buffer),
-    // then the transparent ones from the farthest to the closest, so each one blends over what is behind it.
-    std::stable_sort(cows.begin(), cows.end(), [](const Cow& a, const Cow& b) {
-        const bool aTransparent = a.opacity < 1.0f;
-        const bool bTransparent = b.opacity < 1.0f;
-        if (aTransparent != bTransparent) return !aTransparent;
-        return aTransparent && a.distanceToCamera > b.distanceToCamera;
-        });
+    // ============================================================
+    // Window partitioning with multithreading.
+    // Each worker owns one tile, so framebuffer and depth-buffer writes
+    // never overlap between threads. Each tile completes the opaque pass
+    // before its transparent pass, preserving per-pixel compositing order.
+    // ============================================================
+    constexpr int TILE_SIZE = 100;
+    const int tilesX = (WIDTH + TILE_SIZE - 1) / TILE_SIZE;
+    const int tilesY = (HEIGHT + TILE_SIZE - 1) / TILE_SIZE;
+    const int totalTiles = tilesX * tilesY;
+
+    std::vector<Cow> opaqueCows;
+    std::vector<Cow> transparentCows;
+    opaqueCows.reserve(cows.size());
+    transparentCows.reserve(cows.size());
 
     for (const Cow& cow : cows)
     {
-        shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection, *cow.material, lights, cameraPosition, cow.opacity);
+        if (cow.opacity >= 1.0f) opaqueCows.push_back(cow);
+        else transparentCows.push_back(cow);
     }
+
+    std::stable_sort(transparentCows.begin(), transparentCows.end(),
+        [](const Cow& a, const Cow& b) {
+            return a.distanceToCamera > b.distanceToCamera;
+        });
+
+    std::atomic<int> nextTile{ 0 };
+    unsigned int workerCount = std::thread::hardware_concurrency();
+    if (workerCount == 0) workerCount = 4;
+    workerCount = std::min(workerCount, static_cast<unsigned int>(totalTiles));
+
+    auto renderWorker = [&]() {
+        while (true)
+        {
+            const int tileId = nextTile.fetch_add(1, std::memory_order_relaxed);
+            if (tileId >= totalTiles) break;
+
+            const int tileX = tileId % tilesX;
+            const int tileY = tileId / tilesX;
+            const int tileMinX = tileX * TILE_SIZE;
+            const int tileMinY = tileY * TILE_SIZE;
+            const int tileMaxX = std::min(tileMinX + TILE_SIZE, static_cast<int>(WIDTH));
+            const int tileMaxY = std::min(tileMinY + TILE_SIZE, static_cast<int>(HEIGHT));
+
+            // PASS 1: opaque objects write depth and colour.
+            for (const Cow& cow : opaqueCows)
+            {
+                shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection,
+                    *cow.material, lights, cameraPosition, cow.opacity,
+                    tileMinX, tileMinY, tileMaxX, tileMaxY);
+            }
+
+            // PASS 2: transparent objects, back-to-front, test depth but don't write it.
+            for (const Cow& cow : transparentCows)
+            {
+                shader_draw_mesh(mesh, vertexNormals, cow.model, viewProjection,
+                    *cow.material, lights, cameraPosition, cow.opacity,
+                    tileMinX, tileMinY, tileMaxX, tileMaxY);
+            }
+        }
+        };
+
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+    for (unsigned int i = 0; i < workerCount; ++i)
+        workers.emplace_back(renderWorker);
+    for (std::thread& worker : workers)
+        worker.join();
 }
 
 // =============
