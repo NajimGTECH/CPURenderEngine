@@ -1,10 +1,11 @@
 #pragma once
 
 #include <iostream>
+#include <string>
 
 struct TransformComponent
 {
-	float x, y, z = 0.0f;
+	float x = 0.0f, y = 0.0f, z = 0.0f;
 };
 
 struct PrintComponent

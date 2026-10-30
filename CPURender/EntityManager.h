@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "Components.h"
@@ -13,18 +14,17 @@ public:
 	template<typename ComponentType>
 	int add_component_type()
 	{
-		ComponentStorage<ComponentType>* componentStorage = new ComponentStorage<ComponentType>();
-		m_components.push_back(componentStorage);
+		m_components.push_back(std::make_unique<ComponentStorage<ComponentType>>());
 
-		return static_cast<int>(m_components.size()); // represents the component id
+		return static_cast<int>(m_components.size()) - 1; // represents the component id (index in m_components)
 	}
 
 	void add_component(int entity, int componentId, const void* component)
 	{
-		m_components[componentId]->add_component(entity, component);
+		m_components.at(componentId)->add_component(entity, component);
 	}
 
 private:
 
-	std::vector<IComponentStorage*> m_components;
+	std::vector<std::unique_ptr<IComponentStorage>> m_components;
 };

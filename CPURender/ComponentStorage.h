@@ -2,15 +2,13 @@
 
 #include <array>
 #include <cassert>
-#include <string>
-#include <any>
 
 const int MAX_ENTITIES = 100;
 
 class IComponentStorage
 {
 public:
-    virtual ~IComponentStorage() = 0;
+    virtual ~IComponentStorage() = default;
 
     virtual void add_component(int entity, const void* component) = 0;
     virtual void remove_component(int entity) = 0;
@@ -25,14 +23,16 @@ public:
 
     void add_component(int entity, const void* component) override
     {
+        assert(entity >= 0 && entity < MAX_ENTITIES);
         m_ownedComponents[entity] = true;
-        m_components[entity] = std::any_cast<ComponentType>(component);
+        m_components[entity] = *static_cast<const ComponentType*>(component);
     }
 
     void remove_component(int entity) override
     {
+        assert(entity >= 0 && entity < MAX_ENTITIES);
         m_ownedComponents[entity] = false;
-        m_components[entity] = nullptr;
+        m_components[entity] = ComponentType{};
     }
 
     bool has_component(int entity) override
@@ -42,14 +42,13 @@ public:
 
     void* get_component(int entity) override
     {
-        //static_assert(m_ownedComponents[entity] == false, "Cannot get the component " + std::to_string(typdeid(ComponentType).name()) + " on entity: " + std::to_string(entity));
-        //static_assert(m_ownedComponents[entity] == false, "Cannot get the component on entity");
-        if (m_ownedComponents[entity] == false) { static_assert(true, "Cannot get the component\n"); }
-        return (void*)&m_components[entity];
+        // Runtime check: static_assert only works on compile-time constants.
+        assert(m_ownedComponents[entity] && "Cannot get a component the entity does not own");
+        return &m_components[entity];
     }
 
 private:
 
-    std::array<ComponentType, MAX_ENTITIES> m_components;
-    std::array<bool, MAX_ENTITIES> m_ownedComponents;
+    std::array<ComponentType, MAX_ENTITIES> m_components{};
+    std::array<bool, MAX_ENTITIES> m_ownedComponents{};
 };

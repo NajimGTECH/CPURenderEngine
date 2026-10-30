@@ -2049,12 +2049,17 @@ int main()
     int entity2 = 2;
 
     int transformComponentId = entityManager.add_component_type<TransformComponent>();
+    int printComponentId = entityManager.add_component_type<PrintComponent>();
 
     TransformComponent entity1Transform{ 1.f, 5.f, 3.f };
     TransformComponent entity2Transform{ 0.f, -2.f, 8.f };
+    PrintComponent printComponent;
 
     entityManager.add_component(entity1, transformComponentId, (void*) &entity1Transform);
     entityManager.add_component(entity2, transformComponentId, (void*) &entity2Transform);
+    entityManager.add_component(entity1, printComponentId, (void*) &printComponent);
+
+    printComponent.print_message();
 
 
     // Load the mesh and its texture once, before the loop (chapters 6 and 9)
