@@ -2059,9 +2059,6 @@ int main()
     entityManager.add_component(entity2, transformComponentId, (void*) &entity2Transform);
     entityManager.add_component(entity1, printComponentId, (void*) &printComponent);
 
-    printComponent.print_message();
-
-
     // Load the mesh and its texture once, before the loop (chapters 6 and 9)
     Mesh spot;
     if (!mesh::loadObj("assets/spot.obj", spot)) return EXIT_FAILURE;

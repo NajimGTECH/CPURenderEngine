@@ -24,6 +24,21 @@ public:
 		m_components.at(componentId)->add_component(entity, component);
 	}
 
+	void* get_component(int entity, int componentId)
+	{
+		return m_components.at(componentId)->get_component(entity);
+	}
+
+	void remove_component(int entity, int componentId)
+	{
+		m_components.at(componentId)->remove_component(entity);
+	}
+
+	bool has_component(int entity, int componentId)
+	{
+		return m_components.at(componentId)->has_component(entity);
+	}
+
 private:
 
 	std::vector<std::unique_ptr<IComponentStorage>> m_components;
