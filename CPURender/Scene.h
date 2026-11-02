@@ -7,6 +7,10 @@
 #include "Mesh.h"
 #include "Texture.h"
 
+// The demo scene: what gets loaded, and which entities exist.
+// This is the only place that knows about specific entities (the sun, the cows...):
+// to change what is on screen, this is where to look. The systems just follow the components.
+
 // Everything loaded from disk. Entities point to these, so they must outlive the entities.
 struct Assets
 {
@@ -15,20 +19,11 @@ struct Assets
     std::vector<Material> spotMaterials;
 };
 
-// The entities main.cpp needs to reach directly (key toggles, on-screen text).
-struct Scene
-{
-    int sun = -1;
-    int bulb = -1;
-    int spot = -1;
-    int fountain = -1;
-};
-
 namespace scene
 {
     // Returns false if a file can't be read.
     bool loadAssets(Assets& outAssets);
 
     // Registers the component types, then creates every entity of the demo.
-    Scene create(EntityManager& entities, const Assets& assets);
+    void create(EntityManager& entities, const Assets& assets);
 }

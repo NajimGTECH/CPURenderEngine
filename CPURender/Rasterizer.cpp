@@ -7,9 +7,6 @@
 #include <cmath>
 #include <vector>
 
-// The live pipeline: everything the chapters taught that the engine still runs on.
-// It knows nothing about entities: the render system (Systems.cpp) feeds it one mesh at a time.
-
 // A projected vertex, like ShadedVertex, that also carries its world position for the shader.
 struct ShaderVertex
 {

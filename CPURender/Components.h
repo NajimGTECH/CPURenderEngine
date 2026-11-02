@@ -1,7 +1,8 @@
 #pragma once
 
-#include <iostream>
 #include <string>
+
+#include <SDL3/SDL_keycode.h>
 
 #include "Light.h"
 #include "Mat4.h"
@@ -10,6 +11,18 @@
 #include "Particle.h"
 #include "Quaternion.h"
 #include "Vec3.h"
+
+// Components are plain data: what an entity IS. What it DOES lives in the systems (Systems.h).
+// A new component type must also be registered in registerComponents (Scene.cpp).
+
+
+// ---- Identity and placement ----
+
+// What the entity is called: on the HUD, and when debugging.
+struct NameComponent
+{
+	std::string name;
+};
 
 // Where an entity is in the world. Every system reads its position from here.
 struct TransformComponent
@@ -24,6 +37,10 @@ struct TransformComponent
 	}
 };
 
+
+// ---- What gets drawn ----
+// An entity is drawn as a mesh once it has a Transform, a Mesh and a Material.
+
 // The mesh and the material are shared assets: several entities can point to the same one.
 // They belong to the Assets struct (Scene.h), which must outlive the entities.
 struct MeshComponent
@@ -36,7 +53,8 @@ struct MaterialComponent
 	const Material* material = nullptr;
 };
 
-// The point of view of the scene. Its position comes from the entity's TransformComponent.
+// The point of view of the scene, and how it shows the meshes.
+// Its position comes from the entity's TransformComponent. Only the first camera is used.
 struct CameraComponent
 {
 	float fovY = 1.0f; // vertical field of view, in radians
@@ -44,22 +62,32 @@ struct CameraComponent
 	float farPlane = 100.0f;
 	math::Vector3<float> target;
 	math::Vector3<float> up{ 0.0f, 1.0f, 0.0f };
+
+	// Key T: makes every mesh see-through (alpha blending, no depth writes).
+	// A material can also be transparent on its own with "d" below 1 in the .mtl:
+	// T only caps every opacity at transparentOpacity.
+	bool transparencyEnabled = false;
+	float transparentOpacity = 0.42f;
 };
 
 // Light::position is ignored here: point and spot lights are placed by the entity's TransformComponent.
 struct LightComponent
 {
 	Light light;
-	bool enabled = true; // keys 1, 2 and 3
+	bool enabled = true;
 };
 
-// The system holds the particles alive, the emitter spawns new ones at the entity's position.
+// Careful with the name: a ParticleSystem is the pool of living particles, not a system in the ECS sense.
+// The pool holds the particles alive, the emitter spawns new ones at the entity's position.
 struct ParticleComponent
 {
 	ParticleSystem system;
 	ParticleEmitter emitter;
 	bool emitting = true; // key P. The particles already alive finish their life.
 };
+
+
+// ---- Behaviours: adding one of these to an entity is enough, a system in Systems.cpp does the rest ----
 
 // Turns the entity around an axis, at speed radians per second.
 struct SpinComponent
@@ -84,12 +112,8 @@ struct LightSweepComponent
 	float speed = 1.0f;
 };
 
-struct PrintComponent
+// The key that turns the entity's light on and off.
+struct LightToggleComponent
 {
-	std::string message = "Hello World!\n";
-
-	void print_message()
-	{
-		std::cout << message;
-	}
+	SDL_Keycode key = SDLK_UNKNOWN;
 };

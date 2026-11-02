@@ -10,6 +10,8 @@
 #include <numbers>
 #include <vector>
 
+// Chapter 9: textures, with perspective-correct UVs.
+
 // Same barycentric fill as chapter 3, but instead of blending 3 colors we blend 3 texture
 // coordinates, then read the color of the texture at that spot.
 void chapter_9_draw_triangle_textured(TexturedVertex vA, TexturedVertex vB, TexturedVertex vC, const Texture& meshTexture)

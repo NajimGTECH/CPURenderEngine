@@ -5,6 +5,9 @@
 
 #include <cmath>
 
+// Chapter 4: first transformations, a triangle rotating inside a circle.
+// Its small math classes are deprecated: everything after this chapter uses Vec3.h and Mat4.h.
+
 constexpr int CIRCLE_RAY = 200;
 
 // Math classes

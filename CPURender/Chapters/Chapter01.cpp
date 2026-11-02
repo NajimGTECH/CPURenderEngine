@@ -2,6 +2,7 @@
 
 #include "../Framebuffer.h"
 
+// Chapter 1: writing pixels into the framebuffer, here a colour gradient across the screen.
 void chapter_1()
 {
     for (int y = 0; y < HEIGHT; y++)

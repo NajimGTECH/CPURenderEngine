@@ -10,14 +10,23 @@
 #include "Components.h"
 #include "ComponentStorage.h"
 
+// The heart of the ECS: creates the entities and owns one storage per component type.
+// See ARCHITECTURE.md at the root of the repository for how it fits with the rest of the engine.
+//
+//	EntityManager entities;
+//	entities.add_component_type<TransformComponent>();          // once per type, at startup
+//	const Entity cow = entities.create_entity();
+//	entities.add_component(cow, TransformComponent{});
+//	entities.get_component<TransformComponent>(cow).scale.x = 2.0f;
+//	entities.for_each<TransformComponent>([](Entity, TransformComponent& transform) { /* ... */ });
 class EntityManager
 {
 public:
 
 	// Returns the lowest free entity id: the id of a destroyed entity gets reused.
-	int create_entity()
+	Entity create_entity()
 	{
-		for (int entity = 0; entity < MAX_ENTITIES; entity++)
+		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
 		{
 			if (!m_aliveEntities[entity])
 			{
@@ -27,10 +36,11 @@ public:
 		}
 
 		assert(false && "Too many entities, raise MAX_ENTITIES");
-		return -1;
+		return NO_ENTITY;
 	}
 
-	void destroy_entity(int entity)
+	// Removes every component of the entity, and frees its id.
+	void destroy_entity(Entity entity)
 	{
 		for (const std::unique_ptr<IComponentStorage>& storage : m_components)
 		{
@@ -52,22 +62,22 @@ public:
 		return componentId;
 	}
 
-	void add_component(int entity, int componentId, const void* component)
+	void add_component(Entity entity, int componentId, const void* component)
 	{
 		m_components.at(componentId)->add_component(entity, component);
 	}
 
-	void* get_component(int entity, int componentId)
+	void* get_component(Entity entity, int componentId)
 	{
 		return m_components.at(componentId)->get_component(entity);
 	}
 
-	void remove_component(int entity, int componentId)
+	void remove_component(Entity entity, int componentId)
 	{
 		m_components.at(componentId)->remove_component(entity);
 	}
 
-	bool has_component(int entity, int componentId)
+	bool has_component(Entity entity, int componentId)
 	{
 		return m_components.at(componentId)->has_component(entity);
 	}
@@ -77,26 +87,26 @@ public:
 
 	// The component is copied into its storage: returns the stored copy.
 	template<typename ComponentType>
-	ComponentType& add_component(int entity, const ComponentType& component)
+	ComponentType& add_component(Entity entity, const ComponentType& component)
 	{
 		add_component(entity, component_id<ComponentType>(), &component);
 		return get_component<ComponentType>(entity);
 	}
 
 	template<typename ComponentType>
-	ComponentType& get_component(int entity)
+	ComponentType& get_component(Entity entity)
 	{
 		return *static_cast<ComponentType*>(get_component(entity, component_id<ComponentType>()));
 	}
 
 	template<typename ComponentType>
-	void remove_component(int entity)
+	void remove_component(Entity entity)
 	{
 		remove_component(entity, component_id<ComponentType>());
 	}
 
 	template<typename ComponentType>
-	bool has_component(int entity)
+	bool has_component(Entity entity)
 	{
 		return has_component(entity, component_id<ComponentType>());
 	}
@@ -106,13 +116,26 @@ public:
 	template<typename... ComponentTypes, typename Function>
 	void for_each(Function function)
 	{
-		for (int entity = 0; entity < MAX_ENTITIES; entity++)
+		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
 		{
 			if (m_aliveEntities[entity] && (has_component<ComponentTypes>(entity) && ...))
 			{
 				function(entity, get_component<ComponentTypes>(entity)...);
 			}
 		}
+	}
+
+	// The first living entity that has ALL the given components, or NO_ENTITY.
+	// For what the scene only needs one of, like the camera.
+	template<typename... ComponentTypes>
+	Entity find_first()
+	{
+		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
+		{
+			if (m_aliveEntities[entity] && (has_component<ComponentTypes>(entity) && ...)) return entity;
+		}
+
+		return NO_ENTITY;
 	}
 
 private:
@@ -123,7 +146,7 @@ private:
 		return m_componentIds.at(std::type_index(typeid(ComponentType)));
 	}
 
-	std::vector<std::unique_ptr<IComponentStorage>> m_components;
-	std::unordered_map<std::type_index, int> m_componentIds;
+	std::vector<std::unique_ptr<IComponentStorage>> m_components;   // one storage per component type
+	std::unordered_map<std::type_index, int> m_componentIds;        // component type -> index in m_components
 	std::array<bool, MAX_ENTITIES> m_aliveEntities{};
 };

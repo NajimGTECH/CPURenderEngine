@@ -5,6 +5,9 @@
 #include <iterator>
 #include <numbers>
 
+// Size of the pool of each particle emitter.
+constexpr size_t MAX_PARTICLES = 20000;
+
 bool scene::loadAssets(Assets& outAssets)
 {
     // Load the mesh and its texture once, before the loop (chapters 6 and 9)
@@ -21,8 +24,10 @@ bool scene::loadAssets(Assets& outAssets)
     return true;
 }
 
+// Every component type must be registered once, before any entity uses it.
 static void registerComponents(EntityManager& entities)
 {
+    entities.add_component_type<NameComponent>();
     entities.add_component_type<TransformComponent>();
     entities.add_component_type<MeshComponent>();
     entities.add_component_type<MaterialComponent>();
@@ -32,12 +37,20 @@ static void registerComponents(EntityManager& entities)
     entities.add_component_type<SpinComponent>();
     entities.add_component_type<OrbitComponent>();
     entities.add_component_type<LightSweepComponent>();
+    entities.add_component_type<LightToggleComponent>();
+}
+
+// Reserves the pool on the stored copy: copying a vector doesn't keep its reserved memory.
+static void addParticles(EntityManager& entities, Entity entity, const ParticleComponent& particles)
+{
+    particle::create(entities.add_component(entity, particles).system, MAX_PARTICLES);
 }
 
 // Camera pulled back to see the 4 cows.
 static void createCamera(EntityManager& entities)
 {
-    const int entity = entities.create_entity();
+    const Entity entity = entities.create_entity();
+    entities.add_component(entity, NameComponent{ "camera" });
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, 0.0f, 4.2f);
@@ -49,28 +62,28 @@ static void createCamera(EntityManager& entities)
 }
 
 // White sun, same direction as the light of chapters 10 to 12
-static int createSun(EntityManager& entities)
+static void createSun(EntityManager& entities)
 {
-    const int entity = entities.create_entity();
-
+    const Entity entity = entities.create_entity();
+    entities.add_component(entity, NameComponent{ "sun" });
     entities.add_component(entity, TransformComponent{});
+    entities.add_component(entity, LightToggleComponent{ SDLK_1 });
 
     LightComponent sun;
     sun.light.type = LightType::Directional;
     sun.light.direction = math::Vector3<float>(-0.4f, -0.8f, -0.45f).Normalized();
     sun.light.intensity = 0.8f;
     entities.add_component(entity, sun);
-
-    return entity;
 }
 
 // Orange bulb circling around the scene. One entity with both a light and an emitter:
 // the flame sits on the bulb, wherever it is in its orbit.
-static int createBulb(EntityManager& entities)
+static void createBulb(EntityManager& entities)
 {
-    const int entity = entities.create_entity();
-
+    const Entity entity = entities.create_entity();
+    entities.add_component(entity, NameComponent{ "bulb" });
     entities.add_component(entity, TransformComponent{});
+    entities.add_component(entity, LightToggleComponent{ SDLK_2 });
 
     OrbitComponent orbit;
     orbit.center = math::Vector3<float>(0.0f, 0.5f, 0.0f);
@@ -104,16 +117,15 @@ static int createBulb(EntityManager& entities)
     fire.spread = 0.6f;
     fire.seed = 1234u;
 
-    // Reserve the pool on the stored copy: copying a vector doesn't keep its reserved memory.
-    particle::create(entities.add_component(entity, particles).system, 20000);
-
-    return entity;
+    addParticles(entities, entity, particles);
 }
 
 // Bluish spotlight above the camera, sweeping the scene from left to right
-static int createSpot(EntityManager& entities)
+static void createSpot(EntityManager& entities)
 {
-    const int entity = entities.create_entity();
+    const Entity entity = entities.create_entity();
+    entities.add_component(entity, NameComponent{ "spot" });
+    entities.add_component(entity, LightToggleComponent{ SDLK_3 });
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, 2.5f, 4.0f);
@@ -132,8 +144,6 @@ static int createSpot(EntityManager& entities)
     spot.light.innerConeCos = std::cos(8.0f * std::numbers::pi_v<float> / 180.0f);
     spot.light.outerConeCos = std::cos(14.0f * std::numbers::pi_v<float> / 180.0f);
     entities.add_component(entity, spot);
-
-    return entity;
 }
 
 // The same cow drawn once per material of the .mtl, on a 2x2 grid:
@@ -147,7 +157,8 @@ static void createCows(EntityManager& entities, const Assets& assets)
 
     for (size_t i = 0; i < assets.spotMaterials.size() && i < std::size(slots); i++)
     {
-        const int entity = entities.create_entity();
+        const Entity entity = entities.create_entity();
+        entities.add_component(entity, NameComponent{ "cow " + assets.spotMaterials[i].name });
 
         TransformComponent transform;
         transform.position = slots[i];
@@ -170,9 +181,10 @@ static void createCows(EntityManager& entities, const Assets& assets)
 
 // Fountain: solid blue droplets thrown up, pulled down by the gravity,
 // bouncing on a floor just below the bottom cows and on the walls of a box around them.
-static int createFountain(EntityManager& entities)
+static void createFountain(EntityManager& entities)
 {
-    const int entity = entities.create_entity();
+    const Entity entity = entities.create_entity();
+    entities.add_component(entity, NameComponent{ "fountain" });
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, -1.8f, 0.0f);
@@ -200,21 +212,18 @@ static int createFountain(EntityManager& entities)
     fountain.spread = 0.1f;
     fountain.seed = 5678u;
 
-    particle::create(entities.add_component(entity, particles).system, 20000);
-
-    return entity;
+    addParticles(entities, entity, particles);
 }
 
-Scene scene::create(EntityManager& entities, const Assets& assets)
+// The creation order sets the entity ids, and so the order the lights and the particles are processed in.
+void scene::create(EntityManager& entities, const Assets& assets)
 {
     registerComponents(entities);
 
-    Scene result;
     createCamera(entities);
-    result.sun = createSun(entities);
-    result.bulb = createBulb(entities);
-    result.spot = createSpot(entities);
+    createSun(entities);
+    createBulb(entities);
+    createSpot(entities);
     createCows(entities, assets);
-    result.fountain = createFountain(entities);
-    return result;
+    createFountain(entities);
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+// An 8-bit per channel colour, the format of the textures and the framebuffer.
+// (Materials, lights and particles use Vector3 colours in [0, 1] instead, to do math on them.)
 struct Color3
 {
 	Color3() :
@@ -16,7 +18,8 @@ struct Color3
 
 	uint8_t r, g, b, a;
 
-	uint32_t toRGB() 
+	// The framebuffer format: ARGB8888 (0xAARRGGBB).
+	uint32_t toRGB()
 	{ 
 		return (static_cast<uint32_t>(a) << 24)
 			| (static_cast<uint32_t>(r) << 16)

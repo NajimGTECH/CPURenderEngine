@@ -9,6 +9,8 @@
 #include <numbers>
 #include <vector>
 
+// Chapter 6: the 3D pipeline, on a wireframe mesh loaded from an OBJ file.
+
 // Bresenham line: integer-only walk from one pixel to the other.
 // "error" tracks how far the ideal line is from the pixel we're on,
 // and tells us when to step in x, in y, or in both.

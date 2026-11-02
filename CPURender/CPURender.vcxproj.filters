@@ -60,6 +60,12 @@
     <ClCompile Include="Systems.cpp">
       <Filter>ECS</Filter>
     </ClCompile>
+    <ClCompile Include="RenderSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="HudSystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
     <ClCompile Include="Chapters\Chapter01.cpp">
       <Filter>Chapters</Filter>
     </ClCompile>

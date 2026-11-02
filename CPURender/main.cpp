@@ -11,32 +11,15 @@
 #include <iostream>
 #include <algorithm>
 
-// Keys 1, 2 and 3: turn each light on / off to see what it brings.
-static void toggle_light(EntityManager& entities, int entity)
-{
-    LightComponent& light = entities.get_component<LightComponent>(entity);
-    light.enabled = !light.enabled;
-}
-
-// Key P: stops / restarts the emitters. The particles already alive finish their life.
-static void toggle_particles(EntityManager& entities)
-{
-    entities.for_each<ParticleComponent>([](int, ParticleComponent& particles) {
-        particles.emitting = !particles.emitting;
-        });
-}
-
-static const char* on_off(bool value)
-{
-    return value ? "ON" : "OFF";
-}
+// The application shell: opens the window, then runs the frame loop.
+// Nothing here knows what is in the scene: it comes from Scene.cpp, and the systems drive it.
+// See ARCHITECTURE.md at the root of the repository for the big picture.
 
 // =============
 // Renderer custom functions
 
 // Clears the frame, draws the entities, then sends the framebuffer to the screen.
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture, EntityManager& entities, const Scene& scene,
-    const RenderSettings& settings, const Assets& assets, float seconds)
+void update_render(SDL_Renderer* renderer, SDL_Texture* texture, EntityManager& entities, const Assets& assets, float seconds)
 {
     // Clear the CPU framebuffer.
     std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
@@ -52,35 +35,13 @@ void update_render(SDL_Renderer* renderer, SDL_Texture* texture, EntityManager& 
     //chapter_12(assets.spot, assets.spotTexture, assets.spot.vertexNormals, seconds);
 
     // Shaders, materials and particles (keys 1, 2 and 3 for the lights, T for transparency, P for particles)
-    systems::render(entities, settings);
+    systems::render(entities);
 
-    // Upload the CPU framebuffer, then draw readable UI text on top using SDL3's
-    // built-in debug font (no additional TTF dependency required).
+    // Upload the CPU framebuffer, then draw the text on top.
     SDL_RenderClear(renderer);
     SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
     SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-
-    const ParticleComponent& fire = entities.get_component<ParticleComponent>(scene.bulb);
-    const ParticleComponent& fountain = entities.get_component<ParticleComponent>(scene.fountain);
-
-    char line[128];
-    SDL_RenderDebugText(renderer, 12.0f, 12.0f, "3Dzavr CPU Renderer | Shaders + Materials");
-    if (settings.transparencyEnabled)
-        SDL_snprintf(line, sizeof(line), "Pass: TRANSPARENT | alpha = %.2f | press T to switch", TRANSPARENT_OPACITY);
-    else
-        SDL_snprintf(line, sizeof(line), "Pass: OPAQUE | press T to switch to transparency");
-    SDL_RenderDebugText(renderer, 12.0f, 26.0f, line);
-    SDL_snprintf(line, sizeof(line), "Lights: 1 sun %s | 2 bulb %s | 3 spot %s",
-        on_off(entities.get_component<LightComponent>(scene.sun).enabled),
-        on_off(entities.get_component<LightComponent>(scene.bulb).enabled),
-        on_off(entities.get_component<LightComponent>(scene.spot).enabled));
-    SDL_RenderDebugText(renderer, 12.0f, 40.0f, line);
-    SDL_snprintf(line, sizeof(line), "Particles: P %s | fire %d | fountain %d",
-        on_off(fire.emitting),
-        static_cast<int>(fire.system.particles.size()), static_cast<int>(fountain.system.particles.size()));
-    SDL_RenderDebugText(renderer, 12.0f, 54.0f, line);
-    SDL_RenderDebugText(renderer, 12.0f, 68.0f, "ESC: quit");
+    systems::drawHud(entities, renderer);
     SDL_RenderPresent(renderer);
 }
 
@@ -94,8 +55,7 @@ int main()
     if (!scene::loadAssets(assets)) return EXIT_FAILURE;
 
     EntityManager entities;
-    const Scene scene = scene::create(entities, assets);
-    RenderSettings renderSettings;
+    scene::create(entities, assets);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -123,7 +83,6 @@ int main()
     Uint64 previousFrame = start;
     double fps_accum = 0.0;
     int    fps_count = 0;
-    char   title[160];
 
     // Loop
     bool isRunning = true;
@@ -137,29 +96,14 @@ int main()
             }
             else if (event.type == SDL_EVENT_KEY_DOWN)
             {
+                // Quitting belongs to the application, every other key to the scene.
                 if (event.key.key == SDLK_ESCAPE)
                 {
                     isRunning = false;
                 }
-                else if (event.key.key == SDLK_T)
+                else
                 {
-                    renderSettings.transparencyEnabled = !renderSettings.transparencyEnabled;
-                }
-                else if (event.key.key == SDLK_1)
-                {
-                    toggle_light(entities, scene.sun);
-                }
-                else if (event.key.key == SDLK_2)
-                {
-                    toggle_light(entities, scene.bulb);
-                }
-                else if (event.key.key == SDLK_3)
-                {
-                    toggle_light(entities, scene.spot);
-                }
-                else if (event.key.key == SDLK_P)
-                {
-                    toggle_particles(entities);
+                    systems::handleKey(entities, event.key.key);
                 }
             }
         }
@@ -179,7 +123,7 @@ int main()
 
         // Run the simulation systems, then draw the frame.
         systems::update(entities, seconds, deltaTime);
-        update_render(renderer, texture, entities, scene, renderSettings, assets, seconds);
+        update_render(renderer, texture, entities, assets, seconds);
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -191,13 +135,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            SDL_snprintf(title, sizeof(title), "Shaders - sun %s, bulb %s, spot %s (keys 1/2/3) | %s (key T) | particles %s (key P) | %.1f FPS (%.2f ms)",
-                on_off(entities.get_component<LightComponent>(scene.sun).enabled),
-                on_off(entities.get_component<LightComponent>(scene.bulb).enabled),
-                on_off(entities.get_component<LightComponent>(scene.spot).enabled),
-                renderSettings.transparencyEnabled ? "transparent" : "opaque",
-                on_off(entities.get_component<ParticleComponent>(scene.bulb).emitting), fps, ms);
-            SDL_SetWindowTitle(window, title);
+            systems::updateWindowTitle(entities, window, fps, ms);
             fps_accum = 0.0;
             fps_count = 0;
         }

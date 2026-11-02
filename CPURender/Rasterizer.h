@@ -10,6 +10,13 @@
 #include "Pixel.h"
 #include "Vec3.h"
 
+// The live drawing pipeline: everything the chapters taught that the engine still runs on.
+// It knows nothing about entities: the render system (RenderSystem.cpp) feeds it one mesh at a time.
+//
+// What drawMesh does to a mesh:
+//   vertices -> clip space -> near plane clipping -> divide by w + viewport -> backface culling
+//            -> for each pixel of the triangle: depth test -> shader::shade -> framebuffer
+
 // A vertex in clip space (after the projection, BEFORE the divide by w),
 // with every attribute the clipping must interpolate and the rasterizer needs afterwards.
 struct ClipVertex

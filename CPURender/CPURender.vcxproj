@@ -152,6 +152,8 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClCompile Include="Rasterizer.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Systems.cpp" />
+    <ClCompile Include="RenderSystem.cpp" />
+    <ClCompile Include="HudSystem.cpp" />
     <ClCompile Include="Chapters\Chapter01.cpp" />
     <ClCompile Include="Chapters\Chapter03.cpp" />
     <ClCompile Include="Chapters\Chapter04.cpp" />

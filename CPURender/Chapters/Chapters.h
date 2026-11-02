@@ -10,6 +10,16 @@
 // The course chapters, one file per chapter. They are kept as they were written, so any of them can
 // still be run from main.cpp: they take their mesh directly and don't go through the ECS.
 // What the live renderer still needs from them (edge function, clipping) moved to Rasterizer.h.
+//
+//  1  pixels in the framebuffer
+//  3  filling a triangle (edge function)
+//  4  first transformations
+//  6  3D pipeline, wireframe OBJ mesh
+//  8  backface culling + depth buffer (with the chapter 7 helpers in the same file)
+//  9  textures, perspective-correct UVs
+// 10  diffuse lighting (Lambert), per face
+// 11  smooth shading (Phong) + specular highlights, per pixel
+// 12  near plane clipping + bilinear filtering
 
 void chapter_1();
 void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC);

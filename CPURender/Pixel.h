@@ -5,6 +5,7 @@
 
 #include "Color3.h"
 
+// A screen position (x to the right, y down, from the top left) with a colour.
 struct Pixel
 {
     Pixel(int _x, int _y, Color3 _color) :

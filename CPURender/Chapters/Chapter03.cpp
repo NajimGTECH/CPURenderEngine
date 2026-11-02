@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
+// Chapter 3: filling a triangle with the edge function, blending its 3 corner colours (barycentric weights).
 // The edge function itself now lives in the rasterizer (rasterizer::edge): the live renderer still uses it.
 
 void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
