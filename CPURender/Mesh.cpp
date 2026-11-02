@@ -21,6 +21,59 @@ static void readFaceCorner(const std::string& token, int& vertexIndex, int& uvIn
     }
 }
 
+// Computes one unit normal per face, in the model's local space.
+// The cross product of two edges gives a direction perpendicular to the triangle.
+static std::vector<math::Vector3<float>> computeFaceNormals(const Mesh& mesh)
+{
+    std::vector<math::Vector3<float>> normals;
+    normals.reserve(mesh.faces.size());
+
+    for (const Face& face : mesh.faces)
+    {
+        const auto& a = mesh.vertices[face.a];
+        const auto& b = mesh.vertices[face.b];
+        const auto& c = mesh.vertices[face.c];
+
+        const math::Vector3<float> e1(b.x - a.x, b.y - a.y, b.z - a.z);
+        const math::Vector3<float> e2(c.x - a.x, c.y - a.y, c.z - a.z);
+
+        math::Vector3<float> normal(
+            e1.y * e2.z - e1.z * e2.y,
+            e1.z * e2.x - e1.x * e2.z,
+            e1.x * e2.y - e1.y * e2.x);
+
+        const float length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+        if (length > 0.000001f)
+        {
+            normal.x /= length;
+            normal.y /= length;
+            normal.z /= length;
+        }
+        normals.push_back(normal);
+    }
+    return normals;
+}
+
+// One normal per VERTEX: the sum of the normals of the faces touching it, normalized.
+// Two neighbouring triangles then share the same normal on their common corners:
+// the interpolated normal no longer jumps from one triangle to the next, and the facets disappear.
+static std::vector<math::Vector3<float>> computeVertexNormals(const Mesh& mesh,
+    const std::vector<math::Vector3<float>>& faceNormals)
+{
+    std::vector<math::Vector3<float>> normals(mesh.vertices.size());
+
+    for (size_t faceIndex = 0; faceIndex < mesh.faces.size(); ++faceIndex)
+    {
+        const Face& face = mesh.faces[faceIndex];
+        normals[face.a] += faceNormals[faceIndex];
+        normals[face.b] += faceNormals[faceIndex];
+        normals[face.c] += faceNormals[faceIndex];
+    }
+
+    for (math::Vector3<float>& normal : normals) normal.Normalize();
+    return normals;
+}
+
 bool mesh::loadObj(const std::string& path, Mesh& outMesh)
 {
     std::ifstream file(path);
@@ -98,6 +151,10 @@ bool mesh::loadObj(const std::string& path, Mesh& outMesh)
             return false;
         }
     }
+
+    // Only once every index is known to be valid
+    outMesh.faceNormals = computeFaceNormals(outMesh);
+    outMesh.vertexNormals = computeVertexNormals(outMesh, outMesh.faceNormals);
 
     return true;
 }

@@ -148,6 +148,19 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClCompile Include="Light.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Particle.cpp" />
+    <ClCompile Include="Framebuffer.cpp" />
+    <ClCompile Include="Rasterizer.cpp" />
+    <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="Systems.cpp" />
+    <ClCompile Include="Chapters\Chapter01.cpp" />
+    <ClCompile Include="Chapters\Chapter03.cpp" />
+    <ClCompile Include="Chapters\Chapter04.cpp" />
+    <ClCompile Include="Chapters\Chapter06.cpp" />
+    <ClCompile Include="Chapters\Chapter08.cpp" />
+    <ClCompile Include="Chapters\Chapter09.cpp" />
+    <ClCompile Include="Chapters\Chapter10.cpp" />
+    <ClCompile Include="Chapters\Chapter11.cpp" />
+    <ClCompile Include="Chapters\Chapter12.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Components.h" />
@@ -164,6 +177,11 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClInclude Include="Light.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="Particle.h" />
+    <ClInclude Include="Framebuffer.h" />
+    <ClInclude Include="Rasterizer.h" />
+    <ClInclude Include="Scene.h" />
+    <ClInclude Include="Systems.h" />
+    <ClInclude Include="Chapters\Chapters.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Mat4.inl" />

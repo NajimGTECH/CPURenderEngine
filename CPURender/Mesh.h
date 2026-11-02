@@ -27,6 +27,10 @@ struct Mesh
     std::vector<math::Vector3<float>> vertices;
     std::vector<UV> uvs;
     std::vector<Face> faces;
+
+    // Computed by loadObj, in the model's local space. They don't depend on the rotation: computed only once.
+    std::vector<math::Vector3<float>> faceNormals;   // one per face (chapter 10)
+    std::vector<math::Vector3<float>> vertexNormals; // one per vertex, the average of the neighbouring face normals (chapter 11)
 };
 
 namespace mesh

@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Chapters">
+      <UniqueIdentifier>{7B1C2E54-3A6F-4D18-9E27-5C0D8A41F6B3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ECS">
+      <UniqueIdentifier>{C94A07D2-61E8-4B35-8F1A-2D7E93B0C516}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -41,6 +47,45 @@
     </ClCompile>
     <ClCompile Include="Particle.cpp">
       <Filter>Fichiers sources</Filter>
+    </ClCompile>
+    <ClCompile Include="Framebuffer.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
+    <ClCompile Include="Rasterizer.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Systems.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter01.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter03.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter04.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter06.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter08.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter09.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter10.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter11.cpp">
+      <Filter>Chapters</Filter>
+    </ClCompile>
+    <ClCompile Include="Chapters\Chapter12.cpp">
+      <Filter>Chapters</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -76,6 +121,30 @@
     </ClInclude>
     <ClInclude Include="Particle.h">
       <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="Framebuffer.h">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="Rasterizer.h">
+      <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="Components.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="ComponentStorage.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="EntityManager.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Systems.h">
+      <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Chapters\Chapters.h">
+      <Filter>Chapters</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
