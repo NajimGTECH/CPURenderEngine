@@ -1,8 +1,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_render.h>
 
+#include "ECS.h"
 #include "Framebuffer.h"
-#include "EntityManager.h"
 #include "Scene.h"
 #include "Systems.h"
 #include "Chapters/Chapters.h"
@@ -15,37 +15,6 @@
 // Nothing here knows what is in the scene: it comes from Scene.cpp, and the systems drive it.
 // See ARCHITECTURE.md at the root of the repository for the big picture.
 
-// =============
-// Renderer custom functions
-
-// Clears the frame, draws the entities, then sends the framebuffer to the screen.
-void update_render(SDL_Renderer* renderer, SDL_Texture* texture, EntityManager& entities, const Assets& assets, float seconds)
-{
-    // Clear the CPU framebuffer.
-    std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
-
-    // Draw the current chapter. The ECS scene is the default merged result.
-    // To go back to an older chapter (Chapters/), uncomment its call and comment out systems::render.
-    int drawnTriangles = 0;
-    int culledTriangles = 0;
-    //chapter_8(assets.spot, seconds, drawnTriangles, culledTriangles);
-    //chapter_9(assets.spot, assets.spotTexture, seconds);
-    //chapter_10(assets.spot, assets.spotTexture, assets.spot.faceNormals, seconds);
-    //chapter_11(assets.spot, assets.spotTexture, assets.spot.vertexNormals, seconds);
-    //chapter_12(assets.spot, assets.spotTexture, assets.spot.vertexNormals, seconds);
-
-    // Shaders, materials and particles (keys 1, 2 and 3 for the lights, T for transparency, P for particles)
-    systems::render(entities);
-
-    // Upload the CPU framebuffer, then draw the text on top.
-    SDL_RenderClear(renderer);
-    SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
-    SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-    systems::drawHud(entities, renderer);
-    SDL_RenderPresent(renderer);
-}
-
-
 // Main function
 
 int main()
@@ -54,8 +23,8 @@ int main()
     Assets assets;
     if (!scene::loadAssets(assets)) return EXIT_FAILURE;
 
-    EntityManager entities;
-    scene::create(entities, assets);
+    ECS ecs;
+    const ComponentIDs ids = scene::create(ecs.GetEntityManager(), assets);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -73,6 +42,45 @@ int main()
 
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
     if (texture == nullptr) { SDL_Log("Texture could not be created.\n"); return EXIT_FAILURE; }
+
+    // Elapsed time, written by the frame loop and read by the systems that animate.
+    float seconds = 0.0f;   // since the start
+    float deltaTime = 0.0f; // since the previous frame
+
+    // One frame, in order. A System only receives the EntityManager: the rest comes through the lambda's captures.
+    ecs.AddSystem([&](EntityManager& em) { systems::spinSystem(em, ids, seconds); });
+    ecs.AddSystem([&](EntityManager& em) { systems::orbitSystem(em, ids, seconds); });
+    ecs.AddSystem([&](EntityManager& em) { systems::lightSweepSystem(em, ids, seconds); });
+    ecs.AddSystem([&](EntityManager& em) { systems::particleSystem(em, ids, deltaTime); });
+
+    // Clear the CPU framebuffer.
+    ecs.AddSystem([](EntityManager&) {
+        std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
+        });
+
+    // Draw the current chapter. The ECS scene is the default merged result.
+    // To go back to an older chapter (Chapters/), uncomment its call and comment out systems::render.
+    ecs.AddSystem([&](EntityManager& em) {
+        int drawnTriangles = 0;
+        int culledTriangles = 0;
+        //chapter_8(assets.spot, seconds, drawnTriangles, culledTriangles);
+        //chapter_9(assets.spot, assets.spotTexture, seconds);
+        //chapter_10(assets.spot, assets.spotTexture, assets.spot.faceNormals, seconds);
+        //chapter_11(assets.spot, assets.spotTexture, assets.spot.vertexNormals, seconds);
+        //chapter_12(assets.spot, assets.spotTexture, assets.spot.vertexNormals, seconds);
+
+        // Shaders, materials and particles (keys 1, 2 and 3 for the lights, T for transparency, P for particles)
+        systems::render(em, ids);
+        });
+
+    // Upload the CPU framebuffer, then draw the text on top.
+    ecs.AddSystem([&](EntityManager&) {
+        SDL_RenderClear(renderer);
+        SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
+        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+        });
+    ecs.AddSystem([&](EntityManager& em) { systems::drawHud(em, ids, renderer); });
+    ecs.AddSystem([&](EntityManager&) { SDL_RenderPresent(renderer); });
 
     SDL_Event event;
 
@@ -103,27 +111,26 @@ int main()
                 }
                 else
                 {
-                    systems::handleKey(entities, event.key.key);
+                    systems::handleKey(ecs.GetEntityManager(), ids, event.key.key);
                 }
             }
         }
 
         // Elapsed time, used by the systems to animate.
         const Uint64 frameStart = SDL_GetPerformanceCounter();
-        const float seconds = static_cast<float>(
+        seconds = static_cast<float>(
             static_cast<double>(frameStart - start)
             / static_cast<double>(freq));
 
         // Time since the previous frame, used by the particle simulation.
         // Capped at 0.1 s: after a long freeze (window dragged), the particles must not jump.
-        const float deltaTime = std::min(0.1f, static_cast<float>(
+        deltaTime = std::min(0.1f, static_cast<float>(
             static_cast<double>(frameStart - previousFrame)
             / static_cast<double>(freq)));
         previousFrame = frameStart;
 
-        // Run the simulation systems, then draw the frame.
-        systems::update(entities, seconds, deltaTime);
-        update_render(renderer, texture, entities, assets, seconds);
+        // Run the systems: simulate, then draw the frame.
+        ecs.ExecuteSystems();
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -135,7 +142,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            systems::updateWindowTitle(entities, window, fps, ms);
+            systems::updateWindowTitle(ecs.GetEntityManager(), ids, window, fps, ms);
             fps_accum = 0.0;
             fps_count = 0;
         }

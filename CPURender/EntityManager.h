@@ -1,152 +1,130 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <bitset>
 #include <cassert>
-#include <memory>
-#include <typeindex>
-#include <unordered_map>
+#include <cstddef>
 #include <vector>
 
-#include "Components.h"
 #include "ComponentStorage.h"
 
-// The heart of the ECS: creates the entities and owns one storage per component type.
+// A componentID is both the index of a storage in componentStorages and a bit number in the bitsets.
+const int MAX_COMPONENTS = 64;
+
+// Creates the entities, owns the storages, and remembers which components each entity has.
 // See ARCHITECTURE.md at the root of the repository for how it fits with the rest of the engine.
 //
-//	EntityManager entities;
-//	entities.add_component_type<TransformComponent>();          // once per type, at startup
-//	const Entity cow = entities.create_entity();
-//	entities.add_component(cow, TransformComponent{});
-//	entities.get_component<TransformComponent>(cow).scale.x = 2.0f;
-//	entities.for_each<TransformComponent>([](Entity, TransformComponent& transform) { /* ... */ });
+//	EntityManager em;
+//	const int transformID = em.RegisterComponent<TransformComponent>();  // once per type, at startup
+//	const int cow = em.CreateEntity();
+//	TransformComponent transform;
+//	em.AddComponent(cow, transformID, &transform);
+//	for (int entity : em.FetchAllEntities(transformID)) { /* ... */ }
 class EntityManager
 {
 public:
 
-	// Returns the lowest free entity id: the id of a destroyed entity gets reused.
-	Entity create_entity()
+	EntityManager() = default;
+
+	~EntityManager()
 	{
-		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
+		for (IComponentStorage* storage : componentStorages) delete storage;
+	}
+
+	// The manager owns its storages: a copy would delete them a second time.
+	EntityManager(const EntityManager&) = delete;
+	EntityManager& operator=(const EntityManager&) = delete;
+
+	// Creates the storage of a component type and returns its componentID.
+	template<typename T>
+	int RegisterComponent()
+	{
+		assert(static_cast<int>(componentStorages.size()) < MAX_COMPONENTS && "Too many component types, raise MAX_COMPONENTS");
+
+		componentStorages.push_back(new ComponentStorage<T>());
+		return static_cast<int>(componentStorages.size()) - 1;
+	}
+
+	// Reuses the id of a destroyed entity if there is one.
+	int CreateEntity()
+	{
+		if (!freeEntityIDs.empty())
 		{
-			if (!m_aliveEntities[entity])
-			{
-				m_aliveEntities[entity] = true;
-				return entity;
-			}
+			const int entity = freeEntityIDs.back();
+			freeEntityIDs.pop_back();
+			return entity;
 		}
 
-		assert(false && "Too many entities, raise MAX_ENTITIES");
-		return NO_ENTITY;
+		assert(nextEntityID < MAX_ENTITIES && "Too many entities, raise MAX_ENTITIES");
+		return nextEntityID++;
 	}
 
 	// Removes every component of the entity, and frees its id.
-	void destroy_entity(Entity entity)
+	void DestroyEntity(int entity)
 	{
-		for (const std::unique_ptr<IComponentStorage>& storage : m_components)
+		assert(entity >= 0 && entity < nextEntityID);
+		assert(std::find(freeEntityIDs.begin(), freeEntityIDs.end(), entity) == freeEntityIDs.end() && "Entity already destroyed");
+
+		for (int componentID = 0; componentID < static_cast<int>(componentStorages.size()); componentID++)
 		{
-			if (storage->has_component(entity)) storage->remove_component(entity);
+			if (entityComponents[entity].test(componentID)) RemoveComponent(entity, componentID);
 		}
 
-		m_aliveEntities.at(entity) = false;
+		freeEntityIDs.push_back(entity);
 	}
 
-	// Add a component of new specified type and returns the component id as int.
-	template<typename ComponentType>
-	int add_component_type()
+	// The value is copied into the storage.
+	void AddComponent(int entity, int componentID, void* value)
 	{
-		m_components.push_back(std::make_unique<ComponentStorage<ComponentType>>());
+		assert(entity >= 0 && entity < nextEntityID);
+		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
 
-		const int componentId = static_cast<int>(m_components.size()) - 1; // represents the component id (index in m_components)
-		m_componentIds[std::type_index(typeid(ComponentType))] = componentId;
-
-		return componentId;
+		componentStorages[componentID]->Add(entity, value);
+		entityComponents[entity].set(componentID);
 	}
 
-	void add_component(Entity entity, int componentId, const void* component)
+	void RemoveComponent(int entity, int componentID)
 	{
-		m_components.at(componentId)->add_component(entity, component);
+		assert(entity >= 0 && entity < nextEntityID);
+		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
+
+		componentStorages[componentID]->Remove(entity);
+		entityComponents[entity].reset(componentID);
 	}
 
-	void* get_component(Entity entity, int componentId)
+	// The systems read and write the components through this: cast the result to the component type.
+	void* GetComponent(int entity, int componentID)
 	{
-		return m_components.at(componentId)->get_component(entity);
+		assert(entity >= 0 && entity < nextEntityID);
+		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
+
+		return componentStorages[componentID]->Get(entity);
 	}
 
-	void remove_component(Entity entity, int componentId)
+	// Every living entity that has ALL the given components, in increasing entity id.
+	// A destroyed entity has an empty bitset, so it can't match: that's why the mask must not be empty.
+	template<typename... IDs>
+	std::vector<int> FetchAllEntities(IDs... componentIDs) const
 	{
-		m_components.at(componentId)->remove_component(entity);
-	}
+		static_assert(sizeof...(componentIDs) > 0, "FetchAllEntities needs at least one componentID");
 
-	bool has_component(Entity entity, int componentId)
-	{
-		return m_components.at(componentId)->has_component(entity);
-	}
+		std::bitset<MAX_COMPONENTS> mask;
+		(mask.set(static_cast<std::size_t>(componentIDs)), ...);
 
-	// Same functions, found from the component type: no id to carry around and no void* to cast.
-	// The type must have been registered with add_component_type first.
-
-	// The component is copied into its storage: returns the stored copy.
-	template<typename ComponentType>
-	ComponentType& add_component(Entity entity, const ComponentType& component)
-	{
-		add_component(entity, component_id<ComponentType>(), &component);
-		return get_component<ComponentType>(entity);
-	}
-
-	template<typename ComponentType>
-	ComponentType& get_component(Entity entity)
-	{
-		return *static_cast<ComponentType*>(get_component(entity, component_id<ComponentType>()));
-	}
-
-	template<typename ComponentType>
-	void remove_component(Entity entity)
-	{
-		remove_component(entity, component_id<ComponentType>());
-	}
-
-	template<typename ComponentType>
-	bool has_component(Entity entity)
-	{
-		return has_component(entity, component_id<ComponentType>());
-	}
-
-	// What the systems are built on: calls function(entity, components...) for every living entity
-	// that has ALL the given components, in increasing entity id.
-	template<typename... ComponentTypes, typename Function>
-	void for_each(Function function)
-	{
-		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
+		std::vector<int> entities;
+		for (int entity = 0; entity < nextEntityID; entity++)
 		{
-			if (m_aliveEntities[entity] && (has_component<ComponentTypes>(entity) && ...))
-			{
-				function(entity, get_component<ComponentTypes>(entity)...);
-			}
-		}
-	}
-
-	// The first living entity that has ALL the given components, or NO_ENTITY.
-	// For what the scene only needs one of, like the camera.
-	template<typename... ComponentTypes>
-	Entity find_first()
-	{
-		for (Entity entity = 0; entity < MAX_ENTITIES; entity++)
-		{
-			if (m_aliveEntities[entity] && (has_component<ComponentTypes>(entity) && ...)) return entity;
+			if ((mask & entityComponents[entity]) == mask) entities.push_back(entity);
 		}
 
-		return NO_ENTITY;
+		return entities;
 	}
 
 private:
 
-	template<typename ComponentType>
-	int component_id() const
-	{
-		return m_componentIds.at(std::type_index(typeid(ComponentType)));
-	}
-
-	std::vector<std::unique_ptr<IComponentStorage>> m_components;   // one storage per component type
-	std::unordered_map<std::type_index, int> m_componentIds;        // component type -> index in m_components
-	std::array<bool, MAX_ENTITIES> m_aliveEntities{};
+	int nextEntityID = 0;
+	std::vector<int> freeEntityIDs;
+	std::array<std::bitset<MAX_COMPONENTS>, MAX_ENTITIES> entityComponents;
+	std::vector<IComponentStorage*> componentStorages;
 };

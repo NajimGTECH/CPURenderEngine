@@ -168,6 +168,7 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClInclude Include="Components.h" />
     <ClInclude Include="Color3.h" />
     <ClInclude Include="ComponentStorage.h" />
+    <ClInclude Include="ECS.h" />
     <ClInclude Include="EntityManager.h" />
     <ClInclude Include="Mat4.h" />
     <ClInclude Include="Mesh.h" />

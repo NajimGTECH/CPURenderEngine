@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "Components.h"
 #include "EntityManager.h"
 #include "Material.h"
 #include "Mesh.h"
@@ -25,5 +26,6 @@ namespace scene
     bool loadAssets(Assets& outAssets);
 
     // Registers the component types, then creates every entity of the demo.
-    void create(EntityManager& entities, const Assets& assets);
+    // Returns the componentIDs, which the systems need to read the components.
+    ComponentIDs create(EntityManager& em, const Assets& assets);
 }

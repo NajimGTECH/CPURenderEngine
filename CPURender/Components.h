@@ -13,7 +13,24 @@
 #include "Vec3.h"
 
 // Components are plain data: what an entity IS. What it DOES lives in the systems (Systems.h).
-// A new component type must also be registered in registerComponents (Scene.cpp).
+// A new component type must also get an id in ComponentIDs (below) and be registered in registerComponents (Scene.cpp).
+
+// The componentID of each component type: what RegisterComponent returned for it.
+// -1 until it is registered, which the asserts of the EntityManager catch.
+struct ComponentIDs
+{
+	int name = -1;
+	int transform = -1;
+	int mesh = -1;
+	int material = -1;
+	int camera = -1;
+	int light = -1;
+	int particle = -1;
+	int spin = -1;
+	int orbit = -1;
+	int lightSweep = -1;
+	int lightToggle = -1;
+};
 
 
 // ---- Identity and placement ----

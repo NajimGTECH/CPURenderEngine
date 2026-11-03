@@ -25,77 +25,94 @@ bool scene::loadAssets(Assets& outAssets)
 }
 
 // Every component type must be registered once, before any entity uses it.
-static void registerComponents(EntityManager& entities)
+static ComponentIDs registerComponents(EntityManager& em)
 {
-    entities.add_component_type<NameComponent>();
-    entities.add_component_type<TransformComponent>();
-    entities.add_component_type<MeshComponent>();
-    entities.add_component_type<MaterialComponent>();
-    entities.add_component_type<CameraComponent>();
-    entities.add_component_type<LightComponent>();
-    entities.add_component_type<ParticleComponent>();
-    entities.add_component_type<SpinComponent>();
-    entities.add_component_type<OrbitComponent>();
-    entities.add_component_type<LightSweepComponent>();
-    entities.add_component_type<LightToggleComponent>();
+    ComponentIDs ids;
+    ids.name = em.RegisterComponent<NameComponent>();
+    ids.transform = em.RegisterComponent<TransformComponent>();
+    ids.mesh = em.RegisterComponent<MeshComponent>();
+    ids.material = em.RegisterComponent<MaterialComponent>();
+    ids.camera = em.RegisterComponent<CameraComponent>();
+    ids.light = em.RegisterComponent<LightComponent>();
+    ids.particle = em.RegisterComponent<ParticleComponent>();
+    ids.spin = em.RegisterComponent<SpinComponent>();
+    ids.orbit = em.RegisterComponent<OrbitComponent>();
+    ids.lightSweep = em.RegisterComponent<LightSweepComponent>();
+    ids.lightToggle = em.RegisterComponent<LightToggleComponent>();
+    return ids;
 }
 
 // Reserves the pool on the stored copy: copying a vector doesn't keep its reserved memory.
-static void addParticles(EntityManager& entities, Entity entity, const ParticleComponent& particles)
+static void addParticles(EntityManager& em, const ComponentIDs& ids, int entity, ParticleComponent& particles)
 {
-    particle::create(entities.add_component(entity, particles).system, MAX_PARTICLES);
+    em.AddComponent(entity, ids.particle, &particles);
+    particle::create(static_cast<ParticleComponent*>(em.GetComponent(entity, ids.particle))->system, MAX_PARTICLES);
 }
 
 // Camera pulled back to see the 4 cows.
-static void createCamera(EntityManager& entities)
+static void createCamera(EntityManager& em, const ComponentIDs& ids)
 {
-    const Entity entity = entities.create_entity();
-    entities.add_component(entity, NameComponent{ "camera" });
+    const int entity = em.CreateEntity();
+
+    NameComponent name{ "camera" };
+    em.AddComponent(entity, ids.name, &name);
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, 0.0f, 4.2f);
-    entities.add_component(entity, transform);
+    em.AddComponent(entity, ids.transform, &transform);
 
     CameraComponent camera;
     camera.fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
-    entities.add_component(entity, camera);
+    em.AddComponent(entity, ids.camera, &camera);
 }
 
 // White sun, same direction as the light of chapters 10 to 12
-static void createSun(EntityManager& entities)
+static void createSun(EntityManager& em, const ComponentIDs& ids)
 {
-    const Entity entity = entities.create_entity();
-    entities.add_component(entity, NameComponent{ "sun" });
-    entities.add_component(entity, TransformComponent{});
-    entities.add_component(entity, LightToggleComponent{ SDLK_1 });
+    const int entity = em.CreateEntity();
+
+    NameComponent name{ "sun" };
+    em.AddComponent(entity, ids.name, &name);
+
+    TransformComponent transform;
+    em.AddComponent(entity, ids.transform, &transform);
+
+    LightToggleComponent toggle{ SDLK_1 };
+    em.AddComponent(entity, ids.lightToggle, &toggle);
 
     LightComponent sun;
     sun.light.type = LightType::Directional;
     sun.light.direction = math::Vector3<float>(-0.4f, -0.8f, -0.45f).Normalized();
     sun.light.intensity = 0.8f;
-    entities.add_component(entity, sun);
+    em.AddComponent(entity, ids.light, &sun);
 }
 
 // Orange bulb circling around the scene. One entity with both a light and an emitter:
 // the flame sits on the bulb, wherever it is in its orbit.
-static void createBulb(EntityManager& entities)
+static void createBulb(EntityManager& em, const ComponentIDs& ids)
 {
-    const Entity entity = entities.create_entity();
-    entities.add_component(entity, NameComponent{ "bulb" });
-    entities.add_component(entity, TransformComponent{});
-    entities.add_component(entity, LightToggleComponent{ SDLK_2 });
+    const int entity = em.CreateEntity();
+
+    NameComponent name{ "bulb" };
+    em.AddComponent(entity, ids.name, &name);
+
+    TransformComponent transform;
+    em.AddComponent(entity, ids.transform, &transform);
+
+    LightToggleComponent toggle{ SDLK_2 };
+    em.AddComponent(entity, ids.lightToggle, &toggle);
 
     OrbitComponent orbit;
     orbit.center = math::Vector3<float>(0.0f, 0.5f, 0.0f);
     orbit.radius = 3.0f;
     orbit.speed = 1.0f;
-    entities.add_component(entity, orbit);
+    em.AddComponent(entity, ids.orbit, &orbit);
 
     LightComponent bulb;
     bulb.light.type = LightType::Point;
     bulb.light.color = math::Vector3<float>(1.0f, 0.55f, 0.2f);
     bulb.light.intensity = 5.0f;
-    entities.add_component(entity, bulb);
+    em.AddComponent(entity, ids.light, &bulb);
 
     // Fire: glowing red to orange particles. The gravity points UP (hot air rises)
     // and a strong drag quickly kills the random launch speed, so the flame narrows as it climbs.
@@ -117,25 +134,29 @@ static void createBulb(EntityManager& entities)
     fire.spread = 0.6f;
     fire.seed = 1234u;
 
-    addParticles(entities, entity, particles);
+    addParticles(em, ids, entity, particles);
 }
 
 // Bluish spotlight above the camera, sweeping the scene from left to right
-static void createSpot(EntityManager& entities)
+static void createSpot(EntityManager& em, const ComponentIDs& ids)
 {
-    const Entity entity = entities.create_entity();
-    entities.add_component(entity, NameComponent{ "spot" });
-    entities.add_component(entity, LightToggleComponent{ SDLK_3 });
+    const int entity = em.CreateEntity();
+
+    NameComponent name{ "spot" };
+    em.AddComponent(entity, ids.name, &name);
+
+    LightToggleComponent toggle{ SDLK_3 };
+    em.AddComponent(entity, ids.lightToggle, &toggle);
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, 2.5f, 4.0f);
-    entities.add_component(entity, transform);
+    em.AddComponent(entity, ids.transform, &transform);
 
     LightSweepComponent sweep;
     sweep.center = math::Vector3<float>(0.0f, -0.1f, 0.0f);
     sweep.amplitude = 2.0f;
     sweep.speed = 0.8f;
-    entities.add_component(entity, sweep);
+    em.AddComponent(entity, ids.lightSweep, &sweep);
 
     LightComponent spot;
     spot.light.type = LightType::Spot;
@@ -143,13 +164,13 @@ static void createSpot(EntityManager& entities)
     spot.light.intensity = 20.0f;
     spot.light.innerConeCos = std::cos(8.0f * std::numbers::pi_v<float> / 180.0f);
     spot.light.outerConeCos = std::cos(14.0f * std::numbers::pi_v<float> / 180.0f);
-    entities.add_component(entity, spot);
+    em.AddComponent(entity, ids.light, &spot);
 }
 
 // The same cow drawn once per material of the .mtl, on a 2x2 grid:
 // top row unlit then Lambert, bottom row textured Blinn-Phong then untextured gold.
 // One grid cell per material, the cows all spin together.
-static void createCows(EntityManager& entities, const Assets& assets)
+static void createCows(EntityManager& em, const ComponentIDs& ids, const Assets& assets)
 {
     const math::Vector3<float> slots[] = {
         { -1.1f, 0.85f, 0.0f }, { 1.1f, 0.85f, 0.0f },
@@ -157,38 +178,42 @@ static void createCows(EntityManager& entities, const Assets& assets)
 
     for (size_t i = 0; i < assets.spotMaterials.size() && i < std::size(slots); i++)
     {
-        const Entity entity = entities.create_entity();
-        entities.add_component(entity, NameComponent{ "cow " + assets.spotMaterials[i].name });
+        const int entity = em.CreateEntity();
+
+        NameComponent name{ "cow " + assets.spotMaterials[i].name };
+        em.AddComponent(entity, ids.name, &name);
 
         TransformComponent transform;
         transform.position = slots[i];
         transform.scale = math::Vector3<float>(0.7f, 0.7f, 0.7f);
-        entities.add_component(entity, transform);
+        em.AddComponent(entity, ids.transform, &transform);
 
         MeshComponent mesh;
         mesh.mesh = &assets.spot;
-        entities.add_component(entity, mesh);
+        em.AddComponent(entity, ids.mesh, &mesh);
 
         MaterialComponent material;
         material.material = &assets.spotMaterials[i];
-        entities.add_component(entity, material);
+        em.AddComponent(entity, ids.material, &material);
 
         SpinComponent spin;
         spin.speed = 0.7f;
-        entities.add_component(entity, spin);
+        em.AddComponent(entity, ids.spin, &spin);
     }
 }
 
 // Fountain: solid blue droplets thrown up, pulled down by the gravity,
 // bouncing on a floor just below the bottom cows and on the walls of a box around them.
-static void createFountain(EntityManager& entities)
+static void createFountain(EntityManager& em, const ComponentIDs& ids)
 {
-    const Entity entity = entities.create_entity();
-    entities.add_component(entity, NameComponent{ "fountain" });
+    const int entity = em.CreateEntity();
+
+    NameComponent name{ "fountain" };
+    em.AddComponent(entity, ids.name, &name);
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, -1.8f, 0.0f);
-    entities.add_component(entity, transform);
+    em.AddComponent(entity, ids.transform, &transform);
 
     ParticleComponent particles;
     particles.system.physics.gravity = math::Vector3<float>(0.0f, -4.0f, 0.0f);
@@ -212,18 +237,20 @@ static void createFountain(EntityManager& entities)
     fountain.spread = 0.1f;
     fountain.seed = 5678u;
 
-    addParticles(entities, entity, particles);
+    addParticles(em, ids, entity, particles);
 }
 
 // The creation order sets the entity ids, and so the order the lights and the particles are processed in.
-void scene::create(EntityManager& entities, const Assets& assets)
+ComponentIDs scene::create(EntityManager& em, const Assets& assets)
 {
-    registerComponents(entities);
+    const ComponentIDs ids = registerComponents(em);
 
-    createCamera(entities);
-    createSun(entities);
-    createBulb(entities);
-    createSpot(entities);
-    createCows(entities, assets);
-    createFountain(entities);
+    createCamera(em, ids);
+    createSun(em, ids);
+    createBulb(em, ids);
+    createSpot(em, ids);
+    createCows(em, ids, assets);
+    createFountain(em, ids);
+
+    return ids;
 }

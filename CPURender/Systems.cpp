@@ -6,87 +6,96 @@
 
 // ---- Input ----
 
-void systems::handleKey(EntityManager& entities, SDL_Keycode key)
+void systems::handleKey(EntityManager& em, const ComponentIDs& ids, SDL_Keycode key)
 {
     // T: switches the camera between opaque and see-through meshes.
     if (key == SDLK_T)
     {
-        entities.for_each<CameraComponent>([](Entity, CameraComponent& camera) {
+        for (int entity : em.FetchAllEntities(ids.camera))
+        {
+            CameraComponent& camera = *static_cast<CameraComponent*>(em.GetComponent(entity, ids.camera));
             camera.transparencyEnabled = !camera.transparencyEnabled;
-            });
+        }
     }
 
     // P: stops / restarts the emitters. The particles already alive finish their life.
     if (key == SDLK_P)
     {
-        entities.for_each<ParticleComponent>([](Entity, ParticleComponent& particles) {
+        for (int entity : em.FetchAllEntities(ids.particle))
+        {
+            ParticleComponent& particles = *static_cast<ParticleComponent*>(em.GetComponent(entity, ids.particle));
             particles.emitting = !particles.emitting;
-            });
+        }
     }
 
     // Each light can have its own key, to see what it brings.
-    entities.for_each<LightComponent, LightToggleComponent>(
-        [&](Entity, LightComponent& light, const LightToggleComponent& toggle) {
-            if (toggle.key == key) light.enabled = !light.enabled;
-        });
+    for (int entity : em.FetchAllEntities(ids.light, ids.lightToggle))
+    {
+        LightComponent& light = *static_cast<LightComponent*>(em.GetComponent(entity, ids.light));
+        const LightToggleComponent& toggle = *static_cast<LightToggleComponent*>(em.GetComponent(entity, ids.lightToggle));
+        if (toggle.key == key) light.enabled = !light.enabled;
+    }
 }
 
 
 // ---- Simulation ----
 
 // Spin: the rotation only depends on the time since the start.
-static void spinSystem(EntityManager& entities, float seconds)
+void systems::spinSystem(EntityManager& em, const ComponentIDs& ids, float seconds)
 {
-    entities.for_each<TransformComponent, SpinComponent>(
-        [&](Entity, TransformComponent& transform, const SpinComponent& spin) {
-            transform.rotation = math::Quaternion::FromAxisAngle(spin.axis, seconds * spin.speed);
-        });
+    for (int entity : em.FetchAllEntities(ids.transform, ids.spin))
+    {
+        TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
+        const SpinComponent& spin = *static_cast<SpinComponent*>(em.GetComponent(entity, ids.spin));
+        transform.rotation = math::Quaternion::FromAxisAngle(spin.axis, seconds * spin.speed);
+    }
 }
 
 // Orbit: moves the entities on their circle. A light or an emitter on the same entity follows it.
-static void orbitSystem(EntityManager& entities, float seconds)
+void systems::orbitSystem(EntityManager& em, const ComponentIDs& ids, float seconds)
 {
-    entities.for_each<TransformComponent, OrbitComponent>(
-        [&](Entity, TransformComponent& transform, const OrbitComponent& orbit) {
-            const float angle = seconds * orbit.speed;
-            transform.position = math::Vector3<float>(
-                orbit.center.x + orbit.radius * std::cos(angle),
-                orbit.center.y,
-                orbit.center.z + orbit.radius * std::sin(angle));
-        });
+    for (int entity : em.FetchAllEntities(ids.transform, ids.orbit))
+    {
+        TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
+        const OrbitComponent& orbit = *static_cast<OrbitComponent*>(em.GetComponent(entity, ids.orbit));
+
+        const float angle = seconds * orbit.speed;
+        transform.position = math::Vector3<float>(
+            orbit.center.x + orbit.radius * std::cos(angle),
+            orbit.center.y,
+            orbit.center.z + orbit.radius * std::sin(angle));
+    }
 }
 
 // Light sweep: the light stays in place, only where it points at changes.
-static void lightSweepSystem(EntityManager& entities, float seconds)
+void systems::lightSweepSystem(EntityManager& em, const ComponentIDs& ids, float seconds)
 {
-    entities.for_each<TransformComponent, LightComponent, LightSweepComponent>(
-        [&](Entity, const TransformComponent& transform, LightComponent& light, const LightSweepComponent& sweep) {
-            const math::Vector3<float> target(
-                sweep.center.x + sweep.amplitude * std::sin(seconds * sweep.speed),
-                sweep.center.y,
-                sweep.center.z);
-            light.light.direction = (target - transform.position).Normalized();
-        });
+    for (int entity : em.FetchAllEntities(ids.transform, ids.light, ids.lightSweep))
+    {
+        const TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
+        LightComponent& light = *static_cast<LightComponent*>(em.GetComponent(entity, ids.light));
+        const LightSweepComponent& sweep = *static_cast<LightSweepComponent*>(em.GetComponent(entity, ids.lightSweep));
+
+        const math::Vector3<float> target(
+            sweep.center.x + sweep.amplitude * std::sin(seconds * sweep.speed),
+            sweep.center.y,
+            sweep.center.z);
+        light.light.direction = (target - transform.position).Normalized();
+    }
 }
 
 // Particle simulation step: spawn, age, move.
-static void particleSystem(EntityManager& entities, float deltaTime)
+void systems::particleSystem(EntityManager& em, const ComponentIDs& ids, float deltaTime)
 {
-    entities.for_each<TransformComponent, ParticleComponent>(
-        [&](Entity, const TransformComponent& transform, ParticleComponent& particles) {
-            // The emitter sits on its entity, wherever it is
-            particles.emitter.position = transform.position;
+    for (int entity : em.FetchAllEntities(ids.transform, ids.particle))
+    {
+        const TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
+        ParticleComponent& particles = *static_cast<ParticleComponent*>(em.GetComponent(entity, ids.particle));
 
-            if (particles.emitting) particle::emit(particles.emitter, particles.system, deltaTime);
-            particle::update(particles.system, deltaTime);
-        });
-}
+        // The emitter sits on its entity, wherever it is
+        particles.emitter.position = transform.position;
 
-// The order matters: the orbit moves an emitter before the particle system spawns from it.
-void systems::update(EntityManager& entities, float seconds, float deltaTime)
-{
-    spinSystem(entities, seconds);
-    orbitSystem(entities, seconds);
-    lightSweepSystem(entities, seconds);
-    particleSystem(entities, deltaTime);
+        if (particles.emitting) particle::emit(particles.emitter, particles.system, deltaTime);
+        particle::update(particles.system, deltaTime);
+    }
 }
