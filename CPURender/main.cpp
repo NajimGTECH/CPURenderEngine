@@ -7,7 +7,7 @@
 #include "Systems.h"
 #include "Chapters/Chapters.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 #include <algorithm>
 
@@ -55,7 +55,7 @@ int main()
 
     // Clear the CPU framebuffer.
     ecs.add_system([](EntityManager&) {
-        std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.to_rgb());
+        frameBuffer.fill(Color3{ 16, 16, 24, 255 }.to_rgb());
         });
 
     // Draw the current chapter. The ECS scene is the default merged result.
@@ -76,7 +76,7 @@ int main()
     // Upload the CPU framebuffer, then draw the text on top.
     ecs.add_system([&](EntityManager&) {
         SDL_RenderClear(renderer);
-        SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
+        SDL_UpdateTexture(texture, nullptr, frameBuffer.data(), WIDTH * sizeof(uint32_t));
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         });
     ecs.add_system([&](EntityManager& em) { systems::draw_hud(em, ids, renderer); });

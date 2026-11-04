@@ -4,7 +4,9 @@
 #include "Shader.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <span>
 #include <vector>
 
 // A projected vertex, like ShadedVertex, that also carries its world position for the shader.
@@ -25,6 +27,17 @@ struct ShaderVertex
 float rasterizer::edge(const Pixel& a, const Pixel& b, const Pixel& p)
 {
     return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+}
+
+// A triangle entirely off screen gives min > max, so the loops over the box don't run at all.
+BoundingBox rasterizer::bounding_box(const Pixel& a, const Pixel& b, const Pixel& c)
+{
+    return BoundingBox{
+        std::max(0, std::min({ a.x, b.x, c.x })),
+        std::max(0, std::min({ a.y, b.y, c.y })),
+        std::min(WIDTH - 1, std::max({ a.x, b.x, c.x })),
+        std::min(HEIGHT - 1, std::max({ a.y, b.y, c.y }))
+    };
 }
 
 // p * M with p = (x, y, z, 1), keeping w: multiply_point would already divide by w,
@@ -69,10 +82,10 @@ static float near_distance(const ClipVertex& vertex)
 //  - both behind                    -> nothing
 // The resulting polygon has 0, 3 or 4 vertices; a quad is split into 2 triangles (0,1,2) and (0,2,3).
 // Writes 0, 3 or 6 vertices to out and returns the number of triangles (0, 1 or 2).
-int rasterizer::clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6])
+int rasterizer::clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, std::array<ClipVertex, 6>& out)
 {
-    const ClipVertex triangle[3] = { vA, vB, vC };
-    ClipVertex polygon[4]; // a triangle cut by ONE plane gives at most 4 vertices
+    const std::array<ClipVertex, 3> triangle = { vA, vB, vC };
+    std::array<ClipVertex, 4> polygon; // a triangle cut by ONE plane gives at most 4 vertices
     int count = 0;
 
     for (int edge = 0; edge < 3; edge++)
@@ -148,10 +161,7 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const Pixel pB{ vB.x, vB.y };
     const Pixel pC{ vC.x, vC.y };
 
-    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC);
 
     const bool transparent = opacity < 1.0f;
 
@@ -172,9 +182,9 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const math::Vector3<float> pOverWB = vB.worldPosition * vB.invW;
     const math::Vector3<float> pOverWC = vC.worldPosition * vC.invW;
 
-    for (int y = min_y; y <= max_y; y++)
+    for (int y = box.minY; y <= box.maxY; y++)
     {
-        for (int x = min_x; x <= max_x; x++)
+        for (int x = box.minX; x <= box.maxX; x++)
         {
             const Pixel point{ x, y };
             const float edgeA = rasterizer::edge(pB, pC, point);
@@ -223,10 +233,10 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
 
 // An already clipped triangle (against the near plane, chapter 12):
 // divide by w, viewport, backface culling, then the shader rasterizer.
-static void project_and_draw(const ClipVertex triangle[3], const Material& material,
+static void project_and_draw(std::span<const ClipVertex> triangle, const Material& material,
     const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
-    ShaderVertex projected[3];
+    std::array<ShaderVertex, 3> projected;
     for (int k = 0; k < 3; k++)
     {
         const float invW = 1.0f / triangle[k].w;
@@ -293,11 +303,11 @@ void rasterizer::draw_mesh(const Mesh& mesh,
         vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
         vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
 
-        ClipVertex clipped[6];
+        std::array<ClipVertex, 6> clipped;
         const int triangleCount = clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            project_and_draw(&clipped[t * 3], material, lights, cameraPosition, opacity);
+            project_and_draw(std::span(clipped).subspan(t * 3, 3), material, lights, cameraPosition, opacity);
         }
     }
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include "Light.h"
@@ -27,17 +28,27 @@ struct ClipVertex
     math::Vector3<float> worldPosition;           // world space position (for the shaders)
 };
 
+// The rectangle of pixels a triangle can cover. Both corners are included.
+struct BoundingBox
+{
+    int minX = 0, minY = 0;
+    int maxX = 0, maxY = 0;
+};
+
 namespace rasterizer
 {
     // The edge function: which side of edge A->B the point P is on (chapter 3).
     float edge(const Pixel& a, const Pixel& b, const Pixel& p);
+
+    // The smallest rectangle around a triangle, clamped to the screen (chapter 3).
+    BoundingBox bounding_box(const Pixel& a, const Pixel& b, const Pixel& c);
 
     // p * M, keeping w: the divide must wait until the triangle is clipped (chapter 12).
     ClipVertex to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p);
 
     // Clips a triangle against the near plane. Writes 0, 3 or 6 vertices to out
     // and returns the number of triangles (0, 1 or 2) (chapter 12).
-    int clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6]);
+    int clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, std::array<ClipVertex, 6>& out);
 
     // Draws a mesh placed in the world by its model matrix, with a material.
     // opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.

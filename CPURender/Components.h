@@ -48,7 +48,7 @@ struct TransformComponent
 	math::Quaternion rotation;
 	math::Vector3<float> scale{ 1.0f, 1.0f, 1.0f };
 
-	math::Mat4<float> model_matrix() const
+	math::Mat4<float> model_matrix() constF
 	{
 		return math::Mat4<float>::trs(position, rotation, scale);
 	}

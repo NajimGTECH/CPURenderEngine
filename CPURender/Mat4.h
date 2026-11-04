@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cmath>
 #include <algorithm>
 #include "Vec3.h"
@@ -282,7 +283,7 @@ namespace math
 
     public:
         /** @brief Matrix elements in row-major order. */
-        T m[4][4];
+        std::array<std::array<T, 4>, 4> m;
     };
 }
 

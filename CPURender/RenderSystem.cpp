@@ -106,7 +106,7 @@ void systems::render(EntityManager& em, const ComponentIDs& ids)
     sort_for_drawing(drawables);
 
     // Every mesh shares the same depth buffer: clear it only once.
-    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+    depthBuffer.fill(std::numeric_limits<float>::max());
 
     // Opaque pass: fills the depth buffer
     for (const Drawable& drawable : drawables)

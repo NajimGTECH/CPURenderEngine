@@ -37,22 +37,24 @@ static math::Vector3<float> random_signed_vector(uint32_t& seed)
 // A particle that leaves the box is put back on its side, and its speed on that axis is reversed.
 static void apply_bounds(Particle& particle, const ParticlePhysics& physics)
 {
-    float* position[3] = { &particle.position.x, &particle.position.y, &particle.position.z };
-    float* velocity[3] = { &particle.velocity.x, &particle.velocity.y, &particle.velocity.z };
-    const float minimum[3] = { physics.boundsMin.x, physics.boundsMin.y, physics.boundsMin.z };
-    const float maximum[3] = { physics.boundsMax.x, physics.boundsMax.y, physics.boundsMax.z };
+    using Vector = math::Vector3<float>;
 
-    for (int axis = 0; axis < 3; axis++)
+    for (float Vector::* axis : { &Vector::x, &Vector::y, &Vector::z })
     {
-        if (*position[axis] < minimum[axis])
+        float& position = particle.position.*axis;
+        float& velocity = particle.velocity.*axis;
+        const float minimum = physics.boundsMin.*axis;
+        const float maximum = physics.boundsMax.*axis;
+
+        if (position < minimum)
         {
-            *position[axis] = minimum[axis];
-            *velocity[axis] = -*velocity[axis] * physics.bounce;
+            position = minimum;
+            velocity = -velocity * physics.bounce;
         }
-        else if (*position[axis] > maximum[axis])
+        else if (position > maximum)
         {
-            *position[axis] = maximum[axis];
-            *velocity[axis] = -*velocity[axis] * physics.bounce;
+            position = maximum;
+            velocity = -velocity * physics.bounce;
         }
     }
 }

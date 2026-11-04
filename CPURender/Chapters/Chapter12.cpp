@@ -5,8 +5,10 @@
 #include "../Rasterizer.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <numbers>
+#include <span>
 #include <vector>
 
 // Chapter 12: clipping against the near plane + bilinear filtering
@@ -21,10 +23,10 @@ constexpr float CHAPTER_12_CAMERA_DISTANCE = 3.0f;
 
 // An already clipped triangle (entirely in front of the near plane, so w > 0):
 // divide by w, viewport, backface culling, then the Phong rasterizer of chapter 11.
-void chapter_12_project_and_draw(const ClipVertex triangle[3], const Texture& meshTexture,
+void chapter_12_project_and_draw(std::span<const ClipVertex> triangle, const Texture& meshTexture,
     const math::Vector3<float>& light, const math::Vector3<float>& halfVector)
 {
-    ShadedVertex projected[3];
+    std::array<ShadedVertex, 3> projected;
     for (int k = 0; k < 3; k++)
     {
         const float invW = 1.0f / triangle[k].w;
@@ -70,7 +72,7 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
     const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
     const math::Vector3<float> halfVector = (light + viewDirection).normalized();
 
-    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+    depthBuffer.fill(std::numeric_limits<float>::max());
 
     // 1) Per vertex: clip space + world normal. No more need for the "visible" array:
     // clipping properly handles whatever is behind the camera.
@@ -92,11 +94,11 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         vB.uv = (face.uvB >= 0) ? mesh.uvs[face.uvB] : UV{};
         vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
 
-        ClipVertex clipped[6];
+        std::array<ClipVertex, 6> clipped;
         const int triangleCount = rasterizer::clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector);
+            chapter_12_project_and_draw(std::span(clipped).subspan(t * 3, 3), meshTexture, light, halfVector);
         }
     }
 }

@@ -1,8 +1,8 @@
 #include "Scene.h"
 
+#include <array>
 #include <cmath>
 #include <iostream>
-#include <iterator>
 #include <numbers>
 
 // Size of the pool of each particle emitter.
@@ -172,11 +172,11 @@ static void create_spot(EntityManager& em, const ComponentIDs& ids)
 // One grid cell per material, the cows all spin together.
 static void create_cows(EntityManager& em, const ComponentIDs& ids, const Assets& assets)
 {
-    const math::Vector3<float> slots[] = {
+    const std::array<math::Vector3<float>, 4> slots = { {
         { -1.1f, 0.85f, 0.0f }, { 1.1f, 0.85f, 0.0f },
-        { -1.1f, -1.05f, 0.0f }, { 1.1f, -1.05f, 0.0f } };
+        { -1.1f, -1.05f, 0.0f }, { 1.1f, -1.05f, 0.0f } } };
 
-    for (size_t i = 0; i < assets.spotMaterials.size() && i < std::size(slots); i++)
+    for (size_t i = 0; i < assets.spotMaterials.size() && i < slots.size(); i++)
     {
         const int entity = em.create_entity();
 

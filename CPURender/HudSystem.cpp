@@ -1,5 +1,6 @@
 #include "Systems.h"
 
+#include <format>
 #include <string>
 #include <vector>
 
@@ -26,9 +27,7 @@ static std::string describe_pass(EntityManager& em, const ComponentIDs& ids)
     const CameraComponent& camera = *static_cast<CameraComponent*>(em.get_component(entities[0], ids.camera));
     if (!camera.transparencyEnabled) return "Pass: OPAQUE | press T to switch to transparency";
 
-    char text[64];
-    SDL_snprintf(text, sizeof(text), "Pass: TRANSPARENT | alpha = %.2f | press T to switch", camera.transparentOpacity);
-    return text;
+    return std::format("Pass: TRANSPARENT | alpha = {:.2f} | press T to switch", camera.transparentOpacity);
 }
 
 // "Lights: 1 sun ON | 2 bulb ON | 3 spot ON"
@@ -102,10 +101,9 @@ void systems::update_window_title(EntityManager& em, const ComponentIDs& ids, SD
     const std::vector<int> cameras = em.fetch_all_entities(ids.camera);
     const bool transparent = !cameras.empty() && static_cast<CameraComponent*>(em.get_component(cameras[0], ids.camera))->transparencyEnabled;
 
-    char title[256];
-    SDL_snprintf(title, sizeof(title), "Shaders - %s (keys %s) | %s (key T) | particles %s (key P) | %.1f FPS (%.2f ms)",
-        lights.c_str(), keys.c_str(),
+    const std::string title = std::format("Shaders - {} (keys {}) | {} (key T) | particles {} (key P) | {:.1f} FPS ({:.2f} ms)",
+        lights, keys,
         transparent ? "transparent" : "opaque",
         on_off(are_particles_emitting(em, ids)), fps, frameMs);
-    SDL_SetWindowTitle(window, title);
+    SDL_SetWindowTitle(window, title.c_str());
 }

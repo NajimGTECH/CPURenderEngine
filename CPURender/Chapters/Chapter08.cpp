@@ -2,8 +2,10 @@
 
 #include "../Framebuffer.h"
 #include "../Mat4.h"
+#include "../Rasterizer.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -20,17 +22,14 @@ constexpr bool CULL_BACKFACES = true;
 // Stores the depth of every pixel of the screen.
 // With the projection matrix used here, a smaller depth
 // means a closer surface.
-float zBuffer[WIDTH * HEIGHT];
+std::array<float, WIDTH * HEIGHT> zBuffer;
 
 // Resets every depth before drawing a new frame.
 // The maximum value lets the first visible surface
 // pass the depth test.
 void clear_zbuffer()
 {
-    std::fill_n(
-        zBuffer,
-        WIDTH * HEIGHT,
-        std::numeric_limits<float>::max());
+    zBuffer.fill(std::numeric_limits<float>::max());
 }
 
 // Signed area between three 2D points A, B and P.
@@ -88,26 +87,21 @@ void chapter_7_draw_triangle(
     // the rectangle in which the triangle
     // can cover pixels.
     // The coordinates are clamped to the screen size.
-    const int minX = chapter_7_clampi(
-        std::min({ x0, x1, x2 }), 0, WIDTH - 1);
-
-    const int minY = chapter_7_clampi(
-        std::min({ y0, y1, y2 }), 0, HEIGHT - 1);
-
-    const int maxX = chapter_7_clampi(
-        std::max({ x0, x1, x2 }), 0, WIDTH - 1);
-
-    const int maxY = chapter_7_clampi(
-        std::max({ y0, y1, y2 }), 0, HEIGHT - 1);
+    const BoundingBox box{
+        chapter_7_clampi(std::min({ x0, x1, x2 }), 0, WIDTH - 1),
+        chapter_7_clampi(std::min({ y0, y1, y2 }), 0, HEIGHT - 1),
+        chapter_7_clampi(std::max({ x0, x1, x2 }), 0, WIDTH - 1),
+        chapter_7_clampi(std::max({ y0, y1, y2 }), 0, HEIGHT - 1)
+    };
 
     // Compute 1 / area once, so we don't redo
     // the same division for every pixel.
     const float inverseArea = 1.0f / static_cast<float>(area);
 
     // Walk every pixel of the bounding box.
-    for (int y = minY; y <= maxY; ++y)
+    for (int y = box.minY; y <= box.maxY; ++y)
     {
-        for (int x = minX; x <= maxX; ++x)
+        for (int x = box.minX; x <= box.maxX; ++x)
         {
             // Three edge values for the current pixel,
             // one per edge of the triangle.

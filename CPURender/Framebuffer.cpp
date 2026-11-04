@@ -1,8 +1,8 @@
 #include "Framebuffer.h"
 
-uint32_t frameBuffer[WIDTH * HEIGHT];
+std::array<uint32_t, WIDTH * HEIGHT> frameBuffer;
 
-float depthBuffer[WIDTH * HEIGHT];
+std::array<float, WIDTH * HEIGHT> depthBuffer;
 
 void add_pixel_to_buffer(Pixel px)
 {

@@ -21,14 +21,11 @@ void chapter_3(Pixel& pA, Pixel& pB, Pixel& pC)
         area = -area;
     }
 
-    const float min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const float min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const float max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const float max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC);
 
-    for (int y = min_y; y < max_y; y++)
+    for (int y = box.minY; y < box.maxY; y++)
     {
-        for (int x = min_x; x < max_x; x++)
+        for (int x = box.minX; x < box.maxX; x++)
         {
             Pixel point{ x, y };
             float edgeA = rasterizer::edge(pB, pC, point);

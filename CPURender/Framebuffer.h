@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 #include "Pixel.h"
@@ -17,10 +18,10 @@ constexpr uint16_t HEIGHT = 600;
 // Buffer
 
 // One colour per pixel, row by row from the top left, in ARGB8888 (0xAARRGGBB).
-extern uint32_t frameBuffer[WIDTH * HEIGHT];
+extern std::array<uint32_t, WIDTH * HEIGHT> frameBuffer;
 
 // Depth of the closest thing drawn so far on each pixel (chapter 9).
-extern float depthBuffer[WIDTH * HEIGHT];
+extern std::array<float, WIDTH * HEIGHT> depthBuffer;
 
 // Writes one pixel into frameBuffer. A pixel outside the screen is logged and skipped.
 void add_pixel_to_buffer(Pixel px);

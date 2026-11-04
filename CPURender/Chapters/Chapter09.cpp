@@ -29,10 +29,7 @@ void chapter_9_draw_triangle_textured(TexturedVertex vA, TexturedVertex vB, Text
     const Pixel pB{ vB.x, vB.y };
     const Pixel pC{ vC.x, vC.y };
 
-    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC);
 
     // u and v do NOT vary linearly across the screen under perspective, but u/w, v/w and 1/w do.
     // So we pre-divide the UVs by w here, and divide back at each pixel.
@@ -40,9 +37,9 @@ void chapter_9_draw_triangle_textured(TexturedVertex vA, TexturedVertex vB, Text
     const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
     const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
 
-    for (int y = min_y; y <= max_y; y++)
+    for (int y = box.minY; y <= box.maxY; y++)
     {
-        for (int x = min_x; x <= max_x; x++)
+        for (int x = box.minX; x <= box.maxX; x++)
         {
             const Pixel point{ x, y };
             const float edgeA = rasterizer::edge(pB, pC, point);
@@ -105,7 +102,7 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
     const math::Mat4<float> modelView = model * view;
 
     // Reset the depth buffer: nothing drawn yet = infinitely far
-    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+    depthBuffer.fill(std::numeric_limits<float>::max());
 
     // Project every vertex once, faces will reuse them by index.
     std::vector<TexturedVertex> projected(mesh.vertices.size());

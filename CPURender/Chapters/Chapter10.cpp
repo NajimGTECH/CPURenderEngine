@@ -28,10 +28,7 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
     const Pixel pB{ vB.x, vB.y };
     const Pixel pC{ vC.x, vC.y };
 
-    const int min_x = std::max(0, std::min({ pA.x, pB.x, pC.x }));
-    const int min_y = std::max(0, std::min({ pA.y, pB.y, pC.y }));
-    const int max_x = std::min(WIDTH - 1, std::max({ pA.x, pB.x, pC.x }));
-    const int max_y = std::min(HEIGHT - 1, std::max({ pA.y, pB.y, pC.y }));
+    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC);
 
     // u and v do NOT vary linearly across the screen under perspective, but u/w, v/w and 1/w do.
     // So we pre-divide the UVs by w here, and divide back at each pixel.
@@ -39,9 +36,9 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
     const float uOverWB = vB.uv.u * vB.invW, vOverWB = vB.uv.v * vB.invW;
     const float uOverWC = vC.uv.u * vC.invW, vOverWC = vC.uv.v * vC.invW;
 
-    for (int y = min_y; y <= max_y; y++)
+    for (int y = box.minY; y <= box.maxY; y++)
     {
-        for (int x = min_x; x <= max_x; x++)
+        for (int x = box.minX; x <= box.maxX; x++)
         {
             const Pixel point{ x, y };
             const float edgeA = rasterizer::edge(pB, pC, point);
@@ -112,7 +109,7 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
     light.y /= lightLength;
     light.z /= lightLength;
 
-    std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
+    depthBuffer.fill(std::numeric_limits<float>::max());
 
     std::vector<TexturedVertex> projected(mesh.vertices.size());
     std::vector<bool> visible(mesh.vertices.size(), false);
