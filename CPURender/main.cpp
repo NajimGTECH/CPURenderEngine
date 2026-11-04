@@ -21,10 +21,10 @@ int main()
 {
     // The assets are declared first: the entities point to them.
     Assets assets;
-    if (!scene::loadAssets(assets)) return EXIT_FAILURE;
+    if (!scene::load_assets(assets)) return EXIT_FAILURE;
 
     ECS ecs;
-    const ComponentIDs ids = scene::create(ecs.GetEntityManager(), assets);
+    const ComponentIDs ids = scene::create(ecs.get_entity_manager(), assets);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -48,19 +48,19 @@ int main()
     float deltaTime = 0.0f; // since the previous frame
 
     // One frame, in order. A System only receives the EntityManager: the rest comes through the lambda's captures.
-    ecs.AddSystem([&](EntityManager& em) { systems::spinSystem(em, ids, seconds); });
-    ecs.AddSystem([&](EntityManager& em) { systems::orbitSystem(em, ids, seconds); });
-    ecs.AddSystem([&](EntityManager& em) { systems::lightSweepSystem(em, ids, seconds); });
-    ecs.AddSystem([&](EntityManager& em) { systems::particleSystem(em, ids, deltaTime); });
+    ecs.add_system([&](EntityManager& em) { systems::spin_system(em, ids, seconds); });
+    ecs.add_system([&](EntityManager& em) { systems::orbit_system(em, ids, seconds); });
+    ecs.add_system([&](EntityManager& em) { systems::light_sweep_system(em, ids, seconds); });
+    ecs.add_system([&](EntityManager& em) { systems::particle_system(em, ids, deltaTime); });
 
     // Clear the CPU framebuffer.
-    ecs.AddSystem([](EntityManager&) {
-        std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.toRGB());
+    ecs.add_system([](EntityManager&) {
+        std::fill_n(frameBuffer, WIDTH * HEIGHT, Color3{ 16, 16, 24, 255 }.to_rgb());
         });
 
     // Draw the current chapter. The ECS scene is the default merged result.
     // To go back to an older chapter (Chapters/), uncomment its call and comment out systems::render.
-    ecs.AddSystem([&](EntityManager& em) {
+    ecs.add_system([&](EntityManager& em) {
         int drawnTriangles = 0;
         int culledTriangles = 0;
         //chapter_8(assets.spot, seconds, drawnTriangles, culledTriangles);
@@ -74,13 +74,13 @@ int main()
         });
 
     // Upload the CPU framebuffer, then draw the text on top.
-    ecs.AddSystem([&](EntityManager&) {
+    ecs.add_system([&](EntityManager&) {
         SDL_RenderClear(renderer);
         SDL_UpdateTexture(texture, nullptr, frameBuffer, WIDTH * sizeof(uint32_t));
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         });
-    ecs.AddSystem([&](EntityManager& em) { systems::drawHud(em, ids, renderer); });
-    ecs.AddSystem([&](EntityManager&) { SDL_RenderPresent(renderer); });
+    ecs.add_system([&](EntityManager& em) { systems::draw_hud(em, ids, renderer); });
+    ecs.add_system([&](EntityManager&) { SDL_RenderPresent(renderer); });
 
     SDL_Event event;
 
@@ -111,7 +111,7 @@ int main()
                 }
                 else
                 {
-                    systems::handleKey(ecs.GetEntityManager(), ids, event.key.key);
+                    systems::handle_key(ecs.get_entity_manager(), ids, event.key.key);
                 }
             }
         }
@@ -130,7 +130,7 @@ int main()
         previousFrame = frameStart;
 
         // Run the systems: simulate, then draw the frame.
-        ecs.ExecuteSystems();
+        ecs.execute_systems();
 
         // FPS in the window title, refreshed once per second.
         const Uint64 now = SDL_GetPerformanceCounter();
@@ -142,7 +142,7 @@ int main()
         {
             const double fps = fps_count / fps_accum;
             const double ms = 1000.0 * fps_accum / fps_count;
-            systems::updateWindowTitle(ecs.GetEntityManager(), ids, window, fps, ms);
+            systems::update_window_title(ecs.get_entity_manager(), ids, window, fps, ms);
             fps_accum = 0.0;
             fps_count = 0;
         }

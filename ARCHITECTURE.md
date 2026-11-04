@@ -44,24 +44,24 @@ So **an entity's behaviour comes only from its components**. Give anything a `Sp
 | `EntityManager` | Creates the entities, owns the storages, and keeps a bitset of components per entity | `EntityManager.h` |
 | `ECS` | Holds the `EntityManager` and the list of systems, and runs them | `ECS.h` |
 
-A **componentID** is an `int`: the index of the storage in the `EntityManager`, and the bit number in the bitsets. `RegisterComponent<T>()` returns it, and `scene::create` keeps them all in a `ComponentIDs` struct (`Components.h`) that the systems receive.
+A **componentID** is an `int`: the index of the storage in the `EntityManager`, and the bit number in the bitsets. `register_component<T>()` returns it, and `scene::create` keeps them all in a `ComponentIDs` struct (`Components.h`) that the systems receive.
 
-Systems are built on `FetchAllEntities`. The components come back as `void*`, so each system casts them to their type:
+Systems are built on `fetch_all_entities`. The components come back as `void*`, so each system casts them to their type:
 
 ```cpp
 // Every living entity that has both a Transform and a Spin
-for (int entity : em.FetchAllEntities(ids.transform, ids.spin))
+for (int entity : em.fetch_all_entities(ids.transform, ids.spin))
 {
-    TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
-    const SpinComponent& spin = *static_cast<SpinComponent*>(em.GetComponent(entity, ids.spin));
-    transform.rotation = math::Quaternion::FromAxisAngle(spin.axis, seconds * spin.speed);
+    TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
+    const SpinComponent& spin = *static_cast<SpinComponent*>(em.get_component(entity, ids.spin));
+    transform.rotation = math::Quaternion::from_axis_angle(spin.axis, seconds * spin.speed);
 }
 ```
 
 An `ECS::System` only receives the `EntityManager&`. Everything else a system needs (the ids, the time, the SDL renderer) is captured by the lambda that `main.cpp` adds to the ECS:
 
 ```cpp
-ecs.AddSystem([&](EntityManager& em) { systems::spinSystem(em, ids, seconds); });
+ecs.add_system([&](EntityManager& em) { systems::spin_system(em, ids, seconds); });
 ```
 
 ## The entities
@@ -85,25 +85,25 @@ Meshes and materials are **shared**: `MeshComponent` and `MaterialComponent` onl
 
 | System | File | Needs | Does |
 |---|---|---|---|
-| `handleKey` | `Systems.cpp` | Camera / Particle / Light + LightToggle | Flips transparency (T), emitters (P), lights (their own key) |
-| `spinSystem` | `Systems.cpp` | Transform, Spin | Sets the rotation |
-| `orbitSystem` | `Systems.cpp` | Transform, Orbit | Moves the entity on its circle |
-| `lightSweepSystem` | `Systems.cpp` | Transform, Light, LightSweep | Aims the light |
-| `particleSystem` | `Systems.cpp` | Transform, Particle | Spawns, ages and moves the particles |
+| `handle_key` | `Systems.cpp` | Camera / Particle / Light + LightToggle | Flips transparency (T), emitters (P), lights (their own key) |
+| `spin_system` | `Systems.cpp` | Transform, Spin | Sets the rotation |
+| `orbit_system` | `Systems.cpp` | Transform, Orbit | Moves the entity on its circle |
+| `light_sweep_system` | `Systems.cpp` | Transform, Light, LightSweep | Aims the light |
+| `particle_system` | `Systems.cpp` | Transform, Particle | Spawns, ages and moves the particles |
 | `render` | `RenderSystem.cpp` | Transform + Camera, Light, Mesh + Material, Particle | Draws into the framebuffer |
-| `drawHud`, `updateWindowTitle` | `HudSystem.cpp` | Name, Light, LightToggle, Particle, Camera | Shows the state of the scene |
+| `draw_hud`, `update_window_title` | `HudSystem.cpp` | Name, Light, LightToggle, Particle, Camera | Shows the state of the scene |
 
-Clearing the framebuffer, uploading it and presenting are systems too, but they only touch SDL and the framebuffer, so they are lambdas in `main.cpp`. `handleKey` and `updateWindowTitle` are not added to the ECS: they use the same API, but run on an SDL event and once per second, not once per frame.
+Clearing the framebuffer, uploading it and presenting are systems too, but they only touch SDL and the framebuffer, so they are lambdas in `main.cpp`. `handle_key` and `update_window_title` are not added to the ECS: they use the same API, but run on an SDL event and once per second, not once per frame.
 
-Beware of a naming trap: the `ParticleSystem` struct (`Particle.h`) is the pool of living particles, while `particleSystem` above is the ECS system that updates it.
+Beware of a naming trap: the `ParticleSystem` struct (`Particle.h`) is the pool of living particles, while `particle_system` above is the ECS system that updates it.
 
 ## One frame
 
 ```
 main loop
- |- SDL events     Esc quits, every other key goes to systems::handleKey
+ |- SDL events     Esc quits, every other key goes to systems::handle_key
  |- update seconds and deltaTime
- '- ecs.ExecuteSystems()
+ '- ecs.execute_systems()
        |- spin -> orbit -> light sweep -> particles
        |- clear the framebuffer
        |- systems::render
@@ -113,11 +113,11 @@ main loop
        |     2. particles           hidden by the opaque meshes
        |     3. transparent meshes  back to front, test the depth but don't write it
        |- upload the framebuffer to an SDL texture
-       |- systems::drawHud          text on top, through SDL
+       |- systems::draw_hud          text on top, through SDL
        '- present
 ```
 
-Inside `rasterizer::drawMesh`, for one mesh:
+Inside `rasterizer::draw_mesh`, for one mesh:
 
 ```
 vertices -> clip space -> near plane clipping -> divide by w + viewport -> backface culling
@@ -149,26 +149,26 @@ Add a function in `Scene.cpp` and call it from `scene::create`. No system needs 
 
 ```cpp
 // A big cow that turns the other way
-static void createBigCow(EntityManager& em, const ComponentIDs& ids, const Assets& assets)
+static void create_big_cow(EntityManager& em, const ComponentIDs& ids, const Assets& assets)
 {
-    const int entity = em.CreateEntity();
+    const int entity = em.create_entity();
 
     NameComponent name{ "big cow" };
-    em.AddComponent(entity, ids.name, &name);
+    em.add_component(entity, ids.name, &name);
 
     TransformComponent transform;
     transform.position = math::Vector3<float>(0.0f, 0.0f, -2.0f);
     transform.scale = math::Vector3<float>(2.0f, 2.0f, 2.0f);
-    em.AddComponent(entity, ids.transform, &transform);
+    em.add_component(entity, ids.transform, &transform);
 
     MeshComponent mesh{ &assets.spot };
-    em.AddComponent(entity, ids.mesh, &mesh);
+    em.add_component(entity, ids.mesh, &mesh);
 
     MaterialComponent material{ &assets.spotMaterials[0] };
-    em.AddComponent(entity, ids.material, &material);
+    em.add_component(entity, ids.material, &material);
 
     SpinComponent spin{ { 0.0f, 1.0f, 0.0f }, -1.0f };
-    em.AddComponent(entity, ids.spin, &spin);
+    em.add_component(entity, ids.spin, &spin);
 }
 ```
 
@@ -186,25 +186,25 @@ The order of the calls in `scene::create` sets the entity ids, and so the order 
        float speed = 2.0f;
    };
    ```
-2. Add an `int bob = -1;` to `ComponentIDs` (`Components.h`) and register it in `registerComponents` (`Scene.cpp`). In a Debug build, using an id that isn't registered fails an assert.
+2. Add an `int bob = -1;` to `ComponentIDs` (`Components.h`) and register it in `register_components` (`Scene.cpp`). In a Debug build, using an id that isn't registered fails an assert.
    ```cpp
-   ids.bob = em.RegisterComponent<BobComponent>();
+   ids.bob = em.register_component<BobComponent>();
    ```
 3. Write the system in `Systems.cpp` and declare it in `Systems.h`:
    ```cpp
-   void systems::bobSystem(EntityManager& em, const ComponentIDs& ids, float seconds)
+   void systems::bob_system(EntityManager& em, const ComponentIDs& ids, float seconds)
    {
-       for (int entity : em.FetchAllEntities(ids.transform, ids.bob))
+       for (int entity : em.fetch_all_entities(ids.transform, ids.bob))
        {
-           TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
-           const BobComponent& bob = *static_cast<BobComponent*>(em.GetComponent(entity, ids.bob));
+           TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
+           const BobComponent& bob = *static_cast<BobComponent*>(em.get_component(entity, ids.bob));
            transform.position.y = bob.baseHeight + bob.amplitude * std::sin(seconds * bob.speed);
        }
    }
    ```
 4. Add it to the ECS in `main.cpp`, where it belongs in the frame:
    ```cpp
-   ecs.AddSystem([&](EntityManager& em) { systems::bobSystem(em, ids, seconds); });
+   ecs.add_system([&](EntityManager& em) { systems::bob_system(em, ids, seconds); });
    ```
 5. Add a `BobComponent` to any entity in `Scene.cpp`.
 
@@ -221,15 +221,15 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 - **Matrices**: row vectors, `p' = p * M`, so `A * B` applies A first. A full transform is `model * view * projection`. The details are at the top of `Mat4.h`.
 - **Screen**: the origin is at the top left, y goes down.
 - **Colours**: `Vector3` in [0, 1] for math (materials, lights, particles), `Color3` in 8 bits for pixels (textures, framebuffer).
-- **Naming**: modules are free functions in a lowercase namespace (`mesh::loadObj`, `systems::render`), components are `XComponent`, and helpers private to a `.cpp` file are `static`.
+- **Naming**: modules are free functions in a lowercase namespace (`mesh::load_obj`, `systems::render`), components are `XComponent`, and helpers private to a `.cpp` file are `static`.
 
 ## Good to know
 
 - **Fixed capacity**: `MAX_ENTITIES` is 100. Every storage reserves a slot per entity, so raising it costs memory for every component type. `MAX_COMPONENTS` is 64, the size of the bitsets.
-- **Removing a component doesn't clear its slot**: `Remove` only marks the slot as free, so what the component holds (like a particle pool) stays allocated until the slot is reused.
+- **Removing a component doesn't clear its slot**: `remove` only marks the slot as free, so what the component holds (like a particle pool) stays allocated until the slot is reused.
 - **One camera**: `render` looks through the first entity with a Transform and a Camera. Others are ignored.
 - **`Light::position` and `ParticleEmitter::position` are overwritten**: the systems copy them from the entity's Transform, which is the one source of truth. Set the Transform instead.
-- **Components are copied when added**, and copying a vector loses its reserved memory. That's why `addParticles` in `Scene.cpp` reserves the particle pool after adding the component.
+- **Components are copied when added**, and copying a vector loses its reserved memory. That's why `add_particles` in `Scene.cpp` reserves the particle pool after adding the component.
 - **The framebuffer is a global** on purpose: it holds pixels rather than scene data, and the chapters draw into it too.
 - **Transparency is approximate**: meshes and faces are sorted from back to front (painter's algorithm), which can fail on faces that intersect.
 - **Known bug, chapter 8 draws nothing**: `clear_zbuffer()` in `Chapter08.cpp` is never called, so every pixel fails the depth test. The live scene isn't affected.

@@ -37,10 +37,10 @@ namespace material
 {
     // Minimal Wavefront MTL loader: reads newmtl, Ka, Kd, Ks, Ns, d, illum and map_Kd, ignores the rest.
     // Texture paths are relative to the .mtl file. Returns false if a file can't be read.
-    bool loadMtl(const std::string& path, std::vector<Material>& outMaterials);
+    bool load_mtl(const std::string& path, std::vector<Material>& outMaterials);
 
-    bool hasTexture(const Material& material);
+    bool has_texture(const Material& material);
 
     // A transparent material must be drawn in the transparent pass, after the opaque ones.
-    bool isTransparent(const Material& material);
+    bool is_transparent(const Material& material);
 }

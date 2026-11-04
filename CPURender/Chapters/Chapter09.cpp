@@ -90,16 +90,16 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
     // Same camera and spin as chapter 6
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+    const math::Mat4<float> projection = math::Mat4<float>::perspective(fovY, aspect, 0.1f, 100.0f);
 
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+    const math::Mat4<float> view = math::Mat4<float>::look_at(
         math::Vector3<float>(0.0f, 0.0f, 3.0f),
         math::Vector3<float>(0.0f, 0.0f, 0.0f),
         math::Vector3<float>(0.0f, 1.0f, 0.0f)
     );
 
-    const math::Mat4<float> model = math::Mat4<float>::Rotate(
-        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f)
+    const math::Mat4<float> model = math::Mat4<float>::rotate(
+        math::Quaternion::from_axis_angle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f)
     );
 
     const math::Mat4<float> modelView = model * view;
@@ -114,14 +114,14 @@ void chapter_9(const Mesh& mesh, const Texture& meshTexture, float seconds)
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
         // Model space -> camera space
-        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+        const math::Vector3<float> cameraPos = modelView.multiply_point_affine(mesh.vertices[i]);
 
         // The camera looks down -Z, so w (the distance in front of it) is -z
         const float w = -cameraPos.z;
         if (w <= 0.0001f) continue;
 
-        // Camera space -> NDC [-1, 1] (MultiplyPoint does the perspective divide by w)
-        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+        // Camera space -> NDC [-1, 1] (multiply_point does the perspective divide by w)
+        const math::Vector3<float> ndc = projection.multiply_point(cameraPos);
 
         // NDC -> screen pixels (Y is flipped: up in NDC is down on screen)
         projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);

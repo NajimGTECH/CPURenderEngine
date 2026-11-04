@@ -14,13 +14,13 @@ math::Vector3<float> light::incoming(const Light& light, const math::Vector3<flo
     // Point and spot lights spread out as they travel: the light gets weaker with the square of the distance.
     // The +1 keeps it from exploding when a surface is right next to the light.
     const math::Vector3<float> offset = light.position - position;
-    outToLight = offset.Normalized();
-    float strength = light.intensity / (1.0f + offset.LengthSquared());
+    outToLight = offset.normalized();
+    float strength = light.intensity / (1.0f + offset.length_squared());
 
     if (light.type == LightType::Spot)
     {
         // Cosine of the angle between the spot axis and the ray going from the light to the point
-        const float cosAngle = -outToLight.Dot(light.direction);
+        const float cosAngle = -outToLight.dot(light.direction);
 
         // 1 inside the inner cone, 0 outside the outer cone, linear in between
         const float cone = (cosAngle - light.outerConeCos) / (light.innerConeCos - light.outerConeCos);

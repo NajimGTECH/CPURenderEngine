@@ -22,6 +22,6 @@ struct Pixel
 
 namespace px
 {
-    void const drawPixel(SDL_Renderer* renderer, const Pixel& px);
-    void const drawLine(SDL_Renderer* renderer, const Pixel& px1, const Pixel& px2);
+    void const draw_pixel(SDL_Renderer* renderer, const Pixel& px);
+    void const draw_line(SDL_Renderer* renderer, const Pixel& px1, const Pixel& px2);
 }

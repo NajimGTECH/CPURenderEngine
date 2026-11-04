@@ -19,7 +19,7 @@ struct Color3
 	uint8_t r, g, b, a;
 
 	// The framebuffer format: ARGB8888 (0xAARRGGBB).
-	uint32_t toRGB()
+	uint32_t to_rgb()
 	{ 
 		return (static_cast<uint32_t>(a) << 24)
 			| (static_cast<uint32_t>(r) << 16)

@@ -12,18 +12,18 @@ public:
 
     using System = std::function<void(EntityManager&)>;
 
-    EntityManager& GetEntityManager()
+    EntityManager& get_entity_manager()
     {
         return em;
     }
 
-    void AddSystem(System s)
+    void add_system(System s)
     {
         systems.push_back(s);
     }
 
     // Runs every system once, in the order they were added.
-    void ExecuteSystems()
+    void execute_systems()
     {
         for (System& system : systems)
         {

@@ -20,11 +20,11 @@ struct Texture
 namespace texture
 {
     // Loads a PNG file (decoded by SDL). Returns false if the file can't be read.
-    bool loadPng(const std::string& path, Texture& outTexture);
+    bool load_png(const std::string& path, Texture& outTexture);
 
     // Nearest-neighbour sampling.
     Color3 sample(const Texture& texture, float u, float v);
 
     // Bilinear filtering: blends the four nearest texels.
-    Color3 sampleBilinear(const Texture& texture, float u, float v);
+    Color3 sample_bilinear(const Texture& texture, float u, float v);
 }

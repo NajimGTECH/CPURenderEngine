@@ -53,22 +53,22 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+    const math::Mat4<float> projection = math::Mat4<float>::perspective(fovY, aspect, 0.1f, 100.0f);
 
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+    const math::Mat4<float> view = math::Mat4<float>::look_at(
         math::Vector3<float>(0.0f, 0.0f, CHAPTER_12_CAMERA_DISTANCE),
         math::Vector3<float>(0.0f, 0.0f, 0.0f),
         math::Vector3<float>(0.0f, 1.0f, 0.0f));
 
-    const math::Mat4<float> model = math::Mat4<float>::Rotate(
-        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    const math::Mat4<float> model = math::Mat4<float>::rotate(
+        math::Quaternion::from_axis_angle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
 
     // Row vectors (p * M): model, then view, then projection.
     const math::Mat4<float> modelViewProjection = model * view * projection;
 
-    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
+    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).normalized();
     const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
-    const math::Vector3<float> halfVector = (light + viewDirection).Normalized();
+    const math::Vector3<float> halfVector = (light + viewDirection).normalized();
 
     std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
 
@@ -77,8 +77,8 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
     std::vector<ClipVertex> clipVertices(mesh.vertices.size());
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
-        clipVertices[i] = rasterizer::toClipSpace(modelViewProjection, mesh.vertices[i]);
-        clipVertices[i].normal = model.MultiplyVector(vertexNormals[i]);
+        clipVertices[i] = rasterizer::to_clip_space(modelViewProjection, mesh.vertices[i]);
+        clipVertices[i].normal = model.multiply_vector(vertexNormals[i]);
     }
 
     // 2) Per triangle
@@ -93,7 +93,7 @@ void chapter_12(const Mesh& mesh, const Texture& meshTexture,
         vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
 
         ClipVertex clipped[6];
-        const int triangleCount = rasterizer::clipTriangleNear(vA, vB, vC, clipped);
+        const int triangleCount = rasterizer::clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
             chapter_12_project_and_draw(&clipped[t * 3], meshTexture, light, halfVector);

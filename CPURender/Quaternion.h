@@ -65,12 +65,12 @@ namespace math
          * @return A quaternion representing no rotation.
          *
          * @code
-         * Quaternion q = Quaternion::Identity();
+         * Quaternion q = Quaternion::identity();
          * std::cout << "Identity Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: (1, 0, 0, 0)
          * @endcode
          */
-        static Quaternion Identity();
+        static Quaternion identity();
 
         /**
          * @brief Builds a quaternion from an axis-angle representation.
@@ -81,12 +81,12 @@ namespace math
          * @code
          * Vector3<float> axis(0.0f, 1.0f, 0.0f);
          * float angle = std::numbers::pi_v<float> / 2.0f;
-         * Quaternion q = Quaternion::FromAxisAngle(axis, angle);
-         * std::cout << "FromAxisAngle Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion q = Quaternion::from_axis_angle(axis, angle);
+         * std::cout << "from_axis_angle Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: (~=0.707, 0.0, ~=0.707, 0.0)
          * @endcode
          */
-        static Quaternion FromAxisAngle(const Vector3<float>& axis, float angleRadians);
+        static Quaternion from_axis_angle(const Vector3<float>& axis, float angleRadians);
 
         /**
          * @brief Builds a quaternion from Euler angles (in radians).
@@ -97,12 +97,12 @@ namespace math
          *
          * @code
          * Vector3<float> euler(0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f);
-         * Quaternion q = Quaternion::FromEuler(euler);
-         * std::cout << "FromEuler Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion q = Quaternion::from_euler(euler);
+         * std::cout << "from_euler Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: (~=0.924, 0.0, ~=0.383, 0.0)
          * @endcode
          */
-        static Quaternion FromEuler(const Vector3<float>& eulerRadians);
+        static Quaternion from_euler(const Vector3<float>& eulerRadians);
 
         /**
          * @brief Builds a quaternion that rotates vector "from" to align with vector "to".
@@ -113,12 +113,12 @@ namespace math
          * @code
          * Vector3<float> from(1.0f, 0.0f, 0.0f);
          * Vector3<float> to(0.0f, 0.0f, 1.0f);
-         * Quaternion q = Quaternion::FromToRotation(from, to);
-         * std::cout << "FromToRotation Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion q = Quaternion::from_to_rotation(from, to);
+         * std::cout << "from_to_rotation Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: Quaternion rotating +X to +Z
          * @endcode
          */
-        static Quaternion FromToRotation(const Vector3<float>& from, const Vector3<float>& to);
+        static Quaternion from_to_rotation(const Vector3<float>& from, const Vector3<float>& to);
 
         /**
          * @brief Builds a quaternion that looks in a forward direction with a specified up vector.
@@ -129,30 +129,30 @@ namespace math
          * @code
          * Vector3<float> forward(0.0f, 0.0f, -1.0f);
          * Vector3<float> up(0.0f, 1.0f, 0.0f);
-         * Quaternion q = Quaternion::LookRotation(forward, up);
-         * std::cout << "LookRotation Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion q = Quaternion::look_rotation(forward, up);
+         * std::cout << "look_rotation Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: Quaternion facing forward (-Z)
          * @endcode
          */
-        static Quaternion LookRotation(const Vector3<float>& forward, const Vector3<float>& up = { 0.0f, 1.0f, 0.0f });
+        static Quaternion look_rotation(const Vector3<float>& forward, const Vector3<float>& up = { 0.0f, 1.0f, 0.0f });
 
         /**
          * @brief Returns a normalized copy of this quaternion.
          * @return A unit quaternion representing the same rotation.
          */
-        Quaternion Normalized() const;
+        Quaternion normalized() const;
 
         /**
          * @brief Normalizes this quaternion in place.
          *
          * @code
          * Quaternion q(2.0f, 0.0f, 0.0f, 0.0f);
-         * q.Normalize();
+         * q.normalize();
          * std::cout << "Normalized Quaternion: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: (1, 0, 0, 0)
          * @endcode
          */
-        void Normalize();
+        void normalize();
 
         /**
          * @brief Returns the conjugate of this quaternion.
@@ -160,25 +160,25 @@ namespace math
          *
          * @code
          * Quaternion q(0.707f, 0.0f, 0.707f, 0.0f);
-         * Quaternion c = q.Conjugate();
+         * Quaternion c = q.conjugate();
          * std::cout << "Conjugate: (" << c.w << ", " << c.x << ", " << c.y << ", " << c.z << ")\n";
          * // Output: (0.707, -0.0, -0.707, -0.0)
          * @endcode
          */
-        Quaternion Conjugate() const;
+        Quaternion conjugate() const;
 
         /**
          * @brief Returns the inverse of this quaternion.
          * @return The inverse quaternion.
          *
          * @code
-         * Quaternion q = Quaternion::FromAxisAngle({ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> / 2.0f);
-         * Quaternion inv = q.Inverse();
+         * Quaternion q = Quaternion::from_axis_angle({ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> / 2.0f);
+         * Quaternion inv = q.inverse();
          * std::cout << "Inverse Quaternion: (" << inv.w << ", " << inv.x << ", " << inv.y << ", " << inv.z << ")\n";
          * // Output: Quaternion representing the opposite rotation
          * @endcode
          */
-        Quaternion Inverse() const;
+        Quaternion inverse() const;
 
         /**
          * @brief Computes the dot product between two quaternions.
@@ -189,24 +189,24 @@ namespace math
          * @code
          * Quaternion a(1, 0, 0, 0);
          * Quaternion b(0, 1, 0, 0);
-         * float dot = Quaternion::Dot(a, b);
+         * float dot = Quaternion::dot(a, b);
          * std::cout << "Dot Product: " << dot << "\n";
          * // Output: 0
          * @endcode
          */
-        static float Dot(const Quaternion& a, const Quaternion& b);
+        static float dot(const Quaternion& a, const Quaternion& b);
 
         /**
          * @brief Returns the magnitude (length) of this quaternion.
          * @return The magnitude value.
          */
-        float Magnitude() const;
+        float magnitude() const;
 
         /**
          * @brief Returns the squared magnitude of this quaternion.
          * @return The squared magnitude value.
          */
-        float GetMagnitudeSquared() const;
+        float get_magnitude_squared() const;
 
         /**
          * @brief Computes the angle (in radians) between two quaternions.
@@ -215,14 +215,14 @@ namespace math
          * @return The angular difference in radians.
          *
          * @code
-         * Quaternion a = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion b = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
-         * float angle = Quaternion::Angle(a, b);
+         * Quaternion a = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion b = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
+         * float angle = Quaternion::angle(a, b);
          * std::cout << "Angle between rotations: " << angle << " radians\n";
          * // Output: ~=1.5708 radians
          * @endcode
          */
-        static float Angle(const Quaternion& a, const Quaternion& b);
+        static float angle(const Quaternion& a, const Quaternion& b);
 
         /**
          * @brief Multiplies this quaternion with another (rotation composition).
@@ -230,8 +230,8 @@ namespace math
          * @return The resulting quaternion.
          *
          * @code
-         * Quaternion q1 = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
-         * Quaternion q2 = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
+         * Quaternion q1 = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
+         * Quaternion q2 = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
          * Quaternion result = q1 * q2;
          * std::cout << "Combined rotation (Y 90 degrees): (" << result.w << ", " << result.x << ", " << result.y << ", " << result.z << ")\n";
          * // Output: ~=90 degrees rotation around Y
@@ -252,7 +252,7 @@ namespace math
          * @return True if both quaternions are approximately equal.
          *
          * @code
-         * Quaternion q1 = Quaternion::Identity();
+         * Quaternion q1 = Quaternion::identity();
          * Quaternion q2 = Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
          * std::cout << "Equal? " << (q1 == q2 ? "true" : "false") << "\n";
          * // Output: true
@@ -266,8 +266,8 @@ namespace math
          * @return True if the quaternions differ.
          *
          * @code
-         * Quaternion q1 = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion q2 = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
+         * Quaternion q1 = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion q2 = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
          * std::cout << "Different? " << (q1 != q2 ? "true" : "false") << "\n";
          * // Output: true
          * @endcode
@@ -280,14 +280,14 @@ namespace math
          * @return The rotated vector.
          *
          * @code
-         * Quaternion rotation = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
+         * Quaternion rotation = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
          * Vector3<float> forward(0.0f, 0.0f, -1.0f);
-         * Vector3<float> rotated = rotation.RotateVector(forward);
+         * Vector3<float> rotated = rotation.rotate_vector(forward);
          * std::cout << "Rotated vector: (" << rotated.x << ", " << rotated.y << ", " << rotated.z << ")\n";
          * // Output: Vector diagonally between -Z and -X
          * @endcode
          */
-        Vector3<float> RotateVector(const Vector3<float>& v) const;
+        Vector3<float> rotate_vector(const Vector3<float>& v) const;
 
         /**
          * @brief Performs spherical linear interpolation between two quaternions.
@@ -297,14 +297,14 @@ namespace math
          * @return The interpolated quaternion.
          *
          * @code
-         * Quaternion a = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion b = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
-         * Quaternion q = Quaternion::Slerp(a, b, 0.5f);
+         * Quaternion a = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion b = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
+         * Quaternion q = Quaternion::slerp(a, b, 0.5f);
          * std::cout << "Slerp halfway rotation: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: ~=45? rotation around Y
          * @endcode
          */
-        static Quaternion Slerp(const Quaternion& a, const Quaternion& b, float t);
+        static Quaternion slerp(const Quaternion& a, const Quaternion& b, float t);
 
         /**
          * @brief Performs spherical linear interpolation without clamping t.
@@ -314,14 +314,14 @@ namespace math
          * @return The interpolated quaternion.
          *
          * @code
-         * Quaternion a = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion b = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
-         * Quaternion q = Quaternion::SlerpUnclamped(a, b, 1.5f);
-         * std::cout << "SlerpUnclamped beyond target: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion a = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion b = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
+         * Quaternion q = Quaternion::slerp_unclamped(a, b, 1.5f);
+         * std::cout << "slerp_unclamped beyond target: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: ~=135? rotation around Y
          * @endcode
          */
-        static Quaternion SlerpUnclamped(const Quaternion& a, const Quaternion& b, float t);
+        static Quaternion slerp_unclamped(const Quaternion& a, const Quaternion& b, float t);
 
         /**
          * @brief Performs normalized linear interpolation (clamped).
@@ -331,14 +331,14 @@ namespace math
          * @return The interpolated quaternion.
          *
          * @code
-         * Quaternion a = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion b = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
-         * Quaternion q = Quaternion::Lerp(a, b, 0.5f);
+         * Quaternion a = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion b = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
+         * Quaternion q = Quaternion::lerp(a, b, 0.5f);
          * std::cout << "Lerp halfway rotation: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: ~=45? rotation around Y
          * @endcode
          */
-        static Quaternion Lerp(const Quaternion& a, const Quaternion& b, float t);
+        static Quaternion lerp(const Quaternion& a, const Quaternion& b, float t);
 
         /**
          * @brief Performs normalized linear interpolation without clamping.
@@ -347,7 +347,7 @@ namespace math
          * @param t Interpolation factor (not clamped).
          * @return The interpolated quaternion.
          */
-        static Quaternion LerpUnclamped(const Quaternion& a, const Quaternion& b, float t);
+        static Quaternion lerp_unclamped(const Quaternion& a, const Quaternion& b, float t);
 
         /**
          * @brief Rotates one quaternion toward another by a limited angular step.
@@ -357,14 +357,14 @@ namespace math
          * @return The rotated quaternion.
          *
          * @code
-         * Quaternion from = Quaternion::FromEuler({ 0.0f, 0.0f, 0.0f });
-         * Quaternion to = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
-         * Quaternion q = Quaternion::RotateTowards(from, to, std::numbers::pi_v<float> / 4.0f);
-         * std::cout << "RotateTowards result: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
+         * Quaternion from = Quaternion::from_euler({ 0.0f, 0.0f, 0.0f });
+         * Quaternion to = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 2.0f, 0.0f });
+         * Quaternion q = Quaternion::rotate_towards(from, to, std::numbers::pi_v<float> / 4.0f);
+         * std::cout << "rotate_towards result: (" << q.w << ", " << q.x << ", " << q.y << ", " << q.z << ")\n";
          * // Output: ~=45? rotation around Y
          * @endcode
          */
-        static Quaternion RotateTowards(const Quaternion& from, const Quaternion& to, float maxRadiansDelta);
+        static Quaternion rotate_towards(const Quaternion& from, const Quaternion& to, float maxRadiansDelta);
 
         /**
          * @brief Extracts the axis and rotation angle (in radians) from this quaternion.
@@ -372,27 +372,27 @@ namespace math
          * @param angleRadians Output parameter for the rotation angle in radians.
          *
          * @code
-         * Quaternion q = Quaternion::FromAxisAngle({ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> / 3.0f);
+         * Quaternion q = Quaternion::from_axis_angle({ 0.0f, 1.0f, 0.0f }, std::numbers::pi_v<float> / 3.0f);
          * Vector3<float> axis;
          * float angle;
-         * q.ToAxisAngle(axis, angle);
+         * q.to_axis_angle(axis, angle);
          * std::cout << "Axis: (" << axis.x << ", " << axis.y << ", " << axis.z << "), Angle: " << angle << " radians\n";
          * // Output: Axis (0,1,0), Angle 1.047 rad
          * @endcode
          */
-        void ToAxisAngle(Vector3<float>& axis, float& angleRadians) const;
+        void to_axis_angle(Vector3<float>& axis, float& angleRadians) const;
 
         /**
          * @brief Converts this quaternion to Euler angles (in radians).
          * @return A vector containing pitch (X), yaw (Y), and roll (Z).
          *
          * @code
-         * Quaternion q = Quaternion::FromEuler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
-         * Vector3<float> euler = q.ToEuler();
-         * std::cout << "ToEuler: (" << euler.x << ", " << euler.y << ", " << euler.z << ")\n";
+         * Quaternion q = Quaternion::from_euler({ 0.0f, std::numbers::pi_v<float> / 4.0f, 0.0f });
+         * Vector3<float> euler = q.to_euler();
+         * std::cout << "to_euler: (" << euler.x << ", " << euler.y << ", " << euler.z << ")\n";
          * // Output: (~=0, ~=0.785, ~=0)
          * @endcode
          */
-        Vector3<float> ToEuler() const;
+        Vector3<float> to_euler() const;
     };
 }

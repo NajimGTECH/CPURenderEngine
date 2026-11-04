@@ -191,7 +191,7 @@ void chapter_7_draw_triangle(
                     intensity,
                     intensity,
                     255
-            }.toRGB();
+            }.to_rgb();
         }
     }
 }
@@ -231,14 +231,14 @@ void chapter_8(
     // Perspective projection matrix.
     // 0.1 and 100.0 are the camera's near and far planes.
     const math::Mat4<float> projection =
-        math::Mat4<float>::Perspective(
+        math::Mat4<float>::perspective(
             fovY, aspect, 0.1f, 100.0f);
 
     // View matrix.
     // The camera sits at (0, 0, 3), looks at the origin
     // and uses the Y axis as up.
     const math::Mat4<float> view =
-        math::Mat4<float>::LookAt(
+        math::Mat4<float>::look_at(
             math::Vector3<float>(0.0f, 0.0f, 3.0f),
             math::Vector3<float>(0.0f, 0.0f, 0.0f),
             math::Vector3<float>(0.0f, 1.0f, 0.0f));
@@ -246,8 +246,8 @@ void chapter_8(
     // Rotation around the Y axis.
     // The angle grows with time, which animates the model.
     const math::Mat4<float> model =
-        math::Mat4<float>::Rotate(
-            math::Quaternion::FromAxisAngle(
+        math::Mat4<float>::rotate(
+            math::Quaternion::from_axis_angle(
                 math::Vector3<float>(0.0f, 1.0f, 0.0f),
                 seconds * 0.7f));
 
@@ -271,7 +271,7 @@ void chapter_8(
     {
         // Move the vertex into camera space.
         const math::Vector3<float> cameraPosition =
-            modelView.MultiplyPointAffine(mesh.vertices[i]);
+            modelView.multiply_point_affine(mesh.vertices[i]);
 
         // The camera looks down negative Z.
         // If -Z is too small, the vertex is behind the camera
@@ -285,7 +285,7 @@ void chapter_8(
         // by the homogeneous coordinate that perspective needs.
         // The result holds the normalized (NDC) coordinates.
         const math::Vector3<float> ndc =
-            projection.MultiplyPoint(cameraPosition);
+            projection.multiply_point(cameraPosition);
 
         // Convert the NDC X coordinate, normally between -1 and 1,
         // into a horizontal screen coordinate.

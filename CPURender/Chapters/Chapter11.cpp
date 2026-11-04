@@ -88,19 +88,19 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
             // An average of unit vectors is not unit length (it "sags" towards the centre):
             // re-normalize it, because the lighting dot products expect a unit normal.
             math::Vector3<float> normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
-            normal.Normalize();
+            normal.normalize();
 
             // Diffuse (chapter 10), but per pixel
-            const float diffuse = std::max(0.0f, normal.Dot(light));
+            const float diffuse = std::max(0.0f, normal.dot(light));
             const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;
 
             // Blinn-Phong specular: strongest when the normal points along the half vector
-            const float specular = chapter_11_pow32(std::max(0.0f, normal.Dot(halfVector))) * CHAPTER_11_SPEC_STRENGTH;
+            const float specular = chapter_11_pow32(std::max(0.0f, normal.dot(halfVector))) * CHAPTER_11_SPEC_STRENGTH;
 
             depthBuffer[index] = z;
 
             // texel * diffuse, plus a white highlight on top
-            Color3 texel = bilinear ? texture::sampleBilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
+            Color3 texel = bilinear ? texture::sample_bilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness + 255.0f * specular), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness + 255.0f * specular), 0, 255));
             texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness + 255.0f * specular), 0, 255));
@@ -115,24 +115,24 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+    const math::Mat4<float> projection = math::Mat4<float>::perspective(fovY, aspect, 0.1f, 100.0f);
 
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+    const math::Mat4<float> view = math::Mat4<float>::look_at(
         math::Vector3<float>(0.0f, 0.0f, 3.0f),
         math::Vector3<float>(0.0f, 0.0f, 0.0f),
         math::Vector3<float>(0.0f, 1.0f, 0.0f));
 
-    const math::Mat4<float> model = math::Mat4<float>::Rotate(
-        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    const math::Mat4<float> model = math::Mat4<float>::rotate(
+        math::Quaternion::from_axis_angle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
     const math::Mat4<float> modelView = model * view;
 
     // Same light as in chapter 10.
-    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).Normalized();
+    const math::Vector3<float> light = math::Vector3<float>(0.4f, 0.8f, 0.45f).normalized();
 
     // The camera is at z = 3 looking at the origin: seen from the surface, the eye is roughly towards +Z.
     // We keep that direction constant, so the half vector H = normalize(L + V) is computed once per frame.
     const math::Vector3<float> viewDirection(0.0f, 0.0f, 1.0f);
-    const math::Vector3<float> halfVector = (light + viewDirection).Normalized();
+    const math::Vector3<float> halfVector = (light + viewDirection).normalized();
 
     std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
 
@@ -141,18 +141,18 @@ void chapter_11(const Mesh& mesh, const Texture& meshTexture,
 
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
-        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+        const math::Vector3<float> cameraPos = modelView.multiply_point_affine(mesh.vertices[i]);
         const float w = -cameraPos.z;
         if (w <= 0.0001f) continue;
 
-        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+        const math::Vector3<float> ndc = projection.multiply_point(cameraPos);
         projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
         projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
         projected[i].z = ndc.z;
         projected[i].invW = 1.0f / w;
 
         // The normal is a direction: rotate it with the model matrix, without translation.
-        projected[i].normal = model.MultiplyVector(vertexNormals[i]);
+        projected[i].normal = model.multiply_vector(vertexNormals[i]);
         visible[i] = true;
     }
 

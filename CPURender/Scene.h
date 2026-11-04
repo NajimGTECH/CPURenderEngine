@@ -23,7 +23,7 @@ struct Assets
 namespace scene
 {
     // Returns false if a file can't be read.
-    bool loadAssets(Assets& outAssets);
+    bool load_assets(Assets& outAssets);
 
     // Registers the component types, then creates every entity of the demo.
     // Returns the componentIDs, which the systems need to read the components.

@@ -77,7 +77,7 @@ namespace math
 
     // Comparison
     template<typename T>
-    constexpr bool Vector3<T>::Equals(const Vector3& rhs, T epsilon) const
+    constexpr bool Vector3<T>::equals(const Vector3& rhs, T epsilon) const
     {
         return std::fabs(x - rhs.x) < epsilon &&
             std::fabs(y - rhs.y) < epsilon &&
@@ -98,13 +98,13 @@ namespace math
 
     // Dot and Cross products
     template<typename T>
-    constexpr T Vector3<T>::Dot(const Vector3& rhs) const
+    constexpr T Vector3<T>::dot(const Vector3& rhs) const
     {
         return x * rhs.x + y * rhs.y + z * rhs.z;
     }
 
     template<typename T>
-    constexpr Vector3<T> Vector3<T>::Cross(const Vector3& rhs) const
+    constexpr Vector3<T> Vector3<T>::cross(const Vector3& rhs) const
     {
         return Vector3<T>(
             y * rhs.z - z * rhs.y,
@@ -115,60 +115,60 @@ namespace math
 
     // Magnitude and normalization
     template<typename T>
-    T Vector3<T>::Length() const
+    T Vector3<T>::length() const
     {
         return std::sqrt(x * x + y * y + z * z);
     }
 
     template<typename T>
-    T Vector3<T>::LengthSquared() const
+    T Vector3<T>::length_squared() const
     {
         return x * x + y * y + z * z;
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Normalized() const
+    Vector3<T> Vector3<T>::normalized() const
     {
-        T len = Length();
+        T len = length();
         return len > static_cast<T>(0) ? (*this / len) : Vector3<T>(0, 0, 0);
     }
 
     template<typename T>
-    void Vector3<T>::Normalize()
+    void Vector3<T>::normalize()
     {
-        // Same rule as Normalized(): a length that is not > 0 (zero or NaN) gives (0, 0, 0).
-        *this = Normalized();
+        // Same rule as normalized(): a length that is not > 0 (zero or NaN) gives (0, 0, 0).
+        *this = normalized();
     }
 
     // Distance and interpolation
     template<typename T>
-    T Vector3<T>::Distance(const Vector3& a, const Vector3& b)
+    T Vector3<T>::distance(const Vector3& a, const Vector3& b)
     {
-        return (a - b).Length();
+        return (a - b).length();
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Lerp(const Vector3& a, const Vector3& b, T t)
+    Vector3<T> Vector3<T>::lerp(const Vector3& a, const Vector3& b, T t)
     {
         return a + (b - a) * t;
     }
 
     // Utility
     template<typename T>
-    Vector3<T> Vector3<T>::Perpendicular() const
+    Vector3<T> Vector3<T>::perpendicular() const
     {
         // Returns a perpendicular vector (arbitrary, useful for generating orthogonal basis)
         return std::fabs(x) > std::fabs(z) ? Vector3<T>(-y, x, 0) : Vector3<T>(0, -z, y);
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Scale(const Vector3& a, const Vector3& b)
+    Vector3<T> Vector3<T>::scale(const Vector3& a, const Vector3& b)
     {
         return { a.x * b.x, a.y * b.y, a.z * b.z };
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Min(const Vector3& a, const Vector3& b)
+    Vector3<T> Vector3<T>::min(const Vector3& a, const Vector3& b)
     {
         return {
             (a.x < b.x) ? a.x : b.x,
@@ -178,7 +178,7 @@ namespace math
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Max(const Vector3& a, const Vector3& b)
+    Vector3<T> Vector3<T>::max(const Vector3& a, const Vector3& b)
     {
         return {
             (a.x > b.x) ? a.x : b.x,
@@ -188,10 +188,10 @@ namespace math
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::MoveTowards(const Vector3& current, const Vector3& target, T maxDistanceDelta)
+    Vector3<T> Vector3<T>::move_towards(const Vector3& current, const Vector3& target, T maxDistanceDelta)
     {
         Vector3<T> delta = target - current;
-        T distance = delta.Length();
+        T distance = delta.length();
         if (distance <= maxDistanceDelta || distance == static_cast<T>(0))
             return target;
 
@@ -199,16 +199,16 @@ namespace math
     }
 
     template<typename T>
-    Vector3<T> Vector3<T>::Reflect(const Vector3& direction, const Vector3& normal)
+    Vector3<T> Vector3<T>::reflect(const Vector3& direction, const Vector3& normal)
     {
-        return direction - normal * (static_cast<T>(2) * direction.Dot(normal));
+        return direction - normal * (static_cast<T>(2) * direction.dot(normal));
     }
 
     template<typename T>
-    T Vector3<T>::Angle(const Vector3& a, const Vector3& b)
+    T Vector3<T>::angle(const Vector3& a, const Vector3& b)
     {
-        T dot = a.Dot(b);
-        T mag = a.Length() * b.Length();
+        T dot = a.dot(b);
+        T mag = a.length() * b.length();
         if (mag == static_cast<T>(0))
             return static_cast<T>(0);
 

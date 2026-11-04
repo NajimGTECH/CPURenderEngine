@@ -18,8 +18,8 @@ namespace math
      * @code
      * math::Vector3<float> a(1.0f, 0.0f, 0.0f);
      * math::Vector3<float> b(0.0f, 1.0f, 0.0f);
-     * float dot = a.Dot(b); // 0.0f
-     * math::Vector3<float> cross = a.Cross(b); // (0, 0, 1)
+     * float dot = a.dot(b); // 0.0f
+     * math::Vector3<float> cross = a.cross(b); // (0, 0, 1)
      * @endcode
      */
     template<typename T>
@@ -89,7 +89,7 @@ namespace math
          * @param epsilon Allowed numerical tolerance.
          * @return True if both vectors are approximately equal.
          */
-        constexpr bool Equals(const Vector3& rhs, T epsilon = static_cast<T>(1e-6)) const;
+        constexpr bool equals(const Vector3& rhs, T epsilon = static_cast<T>(1e-6)) const;
 
         /** @brief Checks exact equality between two vectors. */
         constexpr bool operator==(const Vector3& rhs) const;
@@ -102,16 +102,16 @@ namespace math
         // ======================
 
         /** @brief Computes the dot product between this vector and another. */
-        constexpr T Dot(const Vector3& rhs) const;
+        constexpr T dot(const Vector3& rhs) const;
 
         /** @brief Computes the cross product between this vector and another. */
-        constexpr Vector3 Cross(const Vector3& rhs) const;
+        constexpr Vector3 cross(const Vector3& rhs) const;
 
         /** @brief Returns the magnitude (length) of the vector. */
-        T Length() const;
+        T length() const;
 
         /** @brief Returns the squared magnitude (avoids using sqrt). */
-        T LengthSquared() const;
+        T length_squared() const;
 
         /**
          * @brief Returns a normalized (unit length) copy of the vector.
@@ -121,16 +121,16 @@ namespace math
          * very small vectors whose squared length underflows to 0 (components below ~1e-19).
          * Components above ~1e19 overflow the squared length (infinite length): not supported.
          */
-        Vector3 Normalized() const;
+        Vector3 normalized() const;
 
-        /** @brief Normalizes this vector in-place. Same zero-vector rule as Normalized(). */
-        void Normalize();
+        /** @brief Normalizes this vector in-place. Same zero-vector rule as normalized(). */
+        void normalize();
 
         /** @brief Computes the Euclidean distance between two vectors. */
-        static T Distance(const Vector3& a, const Vector3& b);
+        static T distance(const Vector3& a, const Vector3& b);
 
         /** @brief Linearly interpolates between two vectors. */
-        static Vector3 Lerp(const Vector3& a, const Vector3& b, T t);
+        static Vector3 lerp(const Vector3& a, const Vector3& b, T t);
 
         /**
          * @brief Returns a perpendicular vector.
@@ -138,16 +138,16 @@ namespace math
          * The resulting vector is arbitrary but guaranteed to be orthogonal
          * to the current vector. Useful for generating tangent or normal bases.
          */
-        Vector3 Perpendicular() const;
+        Vector3 perpendicular() const;
 
         /** @brief Performs component-wise scaling between two vectors. */
-        static Vector3 Scale(const Vector3& a, const Vector3& b);
+        static Vector3 scale(const Vector3& a, const Vector3& b);
 
         /** @brief Returns a vector containing the component-wise minima. */
-        static Vector3 Min(const Vector3& a, const Vector3& b);
+        static Vector3 min(const Vector3& a, const Vector3& b);
 
         /** @brief Returns a vector containing the component-wise maxima. */
-        static Vector3 Max(const Vector3& a, const Vector3& b);
+        static Vector3 max(const Vector3& a, const Vector3& b);
 
         /**
          * @brief Moves a point towards a target by a fixed distance delta.
@@ -157,7 +157,7 @@ namespace math
          * @param maxDistanceDelta Maximum movement allowed.
          * @return New position vector after movement.
          */
-        static Vector3 MoveTowards(const Vector3& current, const Vector3& target, T maxDistanceDelta);
+        static Vector3 move_towards(const Vector3& current, const Vector3& target, T maxDistanceDelta);
 
         /**
          * @brief Reflects a vector around a normal.
@@ -166,14 +166,14 @@ namespace math
          * @param normal Normal vector to reflect around (should be normalized).
          * @return Reflected vector.
          */
-        static Vector3 Reflect(const Vector3& direction, const Vector3& normal);
+        static Vector3 reflect(const Vector3& direction, const Vector3& normal);
 
         /**
          * @brief Computes the angle between two vectors in degrees.
          *
          * The result is always between 0 and 180 degrees.
          */
-        static T Angle(const Vector3& a, const Vector3& b);
+        static T angle(const Vector3& a, const Vector3& b);
     };
 }
 

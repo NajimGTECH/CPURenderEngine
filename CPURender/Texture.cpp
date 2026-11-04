@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-bool texture::loadPng(const std::string& path, Texture& outTexture)
+bool texture::load_png(const std::string& path, Texture& outTexture)
 {
     SDL_Surface* loaded = SDL_LoadPNG(path.c_str());
 
@@ -91,7 +91,7 @@ Color3 texture::sample(const Texture& texture, float u, float v)
     return texture.texels[y * texture.width + x];
 }
 
-Color3 texture::sampleBilinear(
+Color3 texture::sample_bilinear(
     const Texture& texture,
     float u,
     float v)

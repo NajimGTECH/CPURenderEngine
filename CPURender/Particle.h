@@ -93,5 +93,5 @@ namespace particle
     void update(ParticleSystem& system, float deltaTime);
 
     // 1 when the particle is born, 0 when it dies: Intensity particles fade out with it.
-    float lifeLeft(const Particle& particle);
+    float life_left(const Particle& particle);
 }

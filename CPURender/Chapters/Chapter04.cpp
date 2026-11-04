@@ -129,7 +129,7 @@ void chapter_4(float seconds)
 
     // Translate the triangle to the center of the screen.
     const math::Mat4<float> translation =
-        math::Mat4<float>::Translate(
+        math::Mat4<float>::translate(
             math::Vector3<float>(
                 WIDTH * 0.5f,
                 HEIGHT * 0.5f,
@@ -141,9 +141,9 @@ void chapter_4(float seconds)
     const math::Mat4<float> transform = rotation * translation;
 
     // Transform all three vertices.
-    const auto transformedA = transform.MultiplyPointAffine(baseA);
-    const auto transformedB = transform.MultiplyPointAffine(baseB);
-    const auto transformedC = transform.MultiplyPointAffine(baseC);
+    const auto transformedA = transform.multiply_point_affine(baseA);
+    const auto transformedB = transform.multiply_point_affine(baseB);
+    const auto transformedC = transform.multiply_point_affine(baseC);
 
     // Draw the reference circle.
     chapter_4_draw_circle(

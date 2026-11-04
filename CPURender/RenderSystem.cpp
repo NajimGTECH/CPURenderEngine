@@ -21,25 +21,25 @@ struct Drawable
     float distanceToCamera = 0.0f; // squared, only used to sort
 };
 
-static math::Mat4<float> computeViewProjection(const math::Vector3<float>& cameraPosition, const CameraComponent& camera)
+static math::Mat4<float> compute_view_projection(const math::Vector3<float>& cameraPosition, const CameraComponent& camera)
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(camera.fovY, aspect, camera.nearPlane, camera.farPlane);
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(cameraPosition, camera.target, camera.up);
+    const math::Mat4<float> projection = math::Mat4<float>::perspective(camera.fovY, aspect, camera.nearPlane, camera.farPlane);
+    const math::Mat4<float> view = math::Mat4<float>::look_at(cameraPosition, camera.target, camera.up);
 
     // Row vectors (p * M): view, then projection.
     return view * projection;
 }
 
 // The lights of the scene, gathered every frame because some of them move.
-static std::vector<Light> gatherLights(EntityManager& em, const ComponentIDs& ids)
+static std::vector<Light> gather_lights(EntityManager& em, const ComponentIDs& ids)
 {
     std::vector<Light> lights;
 
-    for (int entity : em.FetchAllEntities(ids.transform, ids.light))
+    for (int entity : em.fetch_all_entities(ids.transform, ids.light))
     {
-        const TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
-        const LightComponent& component = *static_cast<LightComponent*>(em.GetComponent(entity, ids.light));
+        const TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
+        const LightComponent& component = *static_cast<LightComponent*>(em.get_component(entity, ids.light));
         if (!component.enabled) continue;
 
         Light light = component.light;
@@ -51,15 +51,15 @@ static std::vector<Light> gatherLights(EntityManager& em, const ComponentIDs& id
 }
 
 // Every entity with a transform, a mesh and a material.
-static std::vector<Drawable> gatherDrawables(EntityManager& em, const ComponentIDs& ids, const CameraComponent& camera, const math::Vector3<float>& cameraPosition)
+static std::vector<Drawable> gather_drawables(EntityManager& em, const ComponentIDs& ids, const CameraComponent& camera, const math::Vector3<float>& cameraPosition)
 {
     std::vector<Drawable> drawables;
 
-    for (int entity : em.FetchAllEntities(ids.transform, ids.mesh, ids.material))
+    for (int entity : em.fetch_all_entities(ids.transform, ids.mesh, ids.material))
     {
-        const TransformComponent& transform = *static_cast<TransformComponent*>(em.GetComponent(entity, ids.transform));
-        const MeshComponent& mesh = *static_cast<MeshComponent*>(em.GetComponent(entity, ids.mesh));
-        const MaterialComponent& material = *static_cast<MaterialComponent*>(em.GetComponent(entity, ids.material));
+        const TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
+        const MeshComponent& mesh = *static_cast<MeshComponent*>(em.get_component(entity, ids.mesh));
+        const MaterialComponent& material = *static_cast<MaterialComponent*>(em.get_component(entity, ids.material));
 
         Drawable drawable;
         drawable.model = transform.model_matrix();
@@ -68,7 +68,7 @@ static std::vector<Drawable> gatherDrawables(EntityManager& em, const ComponentI
         drawable.opacity = camera.transparencyEnabled
             ? std::min(material.material->opacity, camera.transparentOpacity)
             : material.material->opacity;
-        drawable.distanceToCamera = (transform.position - cameraPosition).LengthSquared();
+        drawable.distanceToCamera = (transform.position - cameraPosition).length_squared();
         drawables.push_back(drawable);
     }
 
@@ -77,7 +77,7 @@ static std::vector<Drawable> gatherDrawables(EntityManager& em, const ComponentI
 
 // Draw order: every opaque mesh first (they fill the depth buffer),
 // then the transparent ones from the farthest to the closest, so each one blends over what is behind it.
-static void sortForDrawing(std::vector<Drawable>& drawables)
+static void sort_for_drawing(std::vector<Drawable>& drawables)
 {
     std::stable_sort(drawables.begin(), drawables.end(), [](const Drawable& a, const Drawable& b) {
         const bool aTransparent = a.opacity < 1.0f;
@@ -90,20 +90,20 @@ static void sortForDrawing(std::vector<Drawable>& drawables)
 // Render system: draws the opaque meshes, then the particles, then the transparent meshes.
 void systems::render(EntityManager& em, const ComponentIDs& ids)
 {
-    const std::vector<int> cameras = em.FetchAllEntities(ids.transform, ids.camera);
+    const std::vector<int> cameras = em.fetch_all_entities(ids.transform, ids.camera);
     if (cameras.empty()) return;
 
     const int cameraEntity = cameras[0];
-    const CameraComponent& camera = *static_cast<CameraComponent*>(em.GetComponent(cameraEntity, ids.camera));
+    const CameraComponent& camera = *static_cast<CameraComponent*>(em.get_component(cameraEntity, ids.camera));
 
     // The shader needs the camera position for the highlights.
-    const math::Vector3<float> cameraPosition = static_cast<TransformComponent*>(em.GetComponent(cameraEntity, ids.transform))->position;
-    const math::Mat4<float> viewProjection = computeViewProjection(cameraPosition, camera);
+    const math::Vector3<float> cameraPosition = static_cast<TransformComponent*>(em.get_component(cameraEntity, ids.transform))->position;
+    const math::Mat4<float> viewProjection = compute_view_projection(cameraPosition, camera);
 
-    const std::vector<Light> lights = gatherLights(em, ids);
+    const std::vector<Light> lights = gather_lights(em, ids);
 
-    std::vector<Drawable> drawables = gatherDrawables(em, ids, camera, cameraPosition);
-    sortForDrawing(drawables);
+    std::vector<Drawable> drawables = gather_drawables(em, ids, camera, cameraPosition);
+    sort_for_drawing(drawables);
 
     // Every mesh shares the same depth buffer: clear it only once.
     std::fill_n(depthBuffer, WIDTH * HEIGHT, std::numeric_limits<float>::max());
@@ -112,21 +112,21 @@ void systems::render(EntityManager& em, const ComponentIDs& ids)
     for (const Drawable& drawable : drawables)
     {
         if (drawable.opacity < 1.0f) continue;
-        rasterizer::drawMesh(*drawable.mesh, drawable.model, viewProjection, *drawable.material, lights, cameraPosition, drawable.opacity);
+        rasterizer::draw_mesh(*drawable.mesh, drawable.model, viewProjection, *drawable.material, lights, cameraPosition, drawable.opacity);
     }
 
     // Particle pass: after the opaque meshes so they can hide the particles behind them,
     // before the transparent ones so the particles show through them.
-    for (int entity : em.FetchAllEntities(ids.particle))
+    for (int entity : em.fetch_all_entities(ids.particle))
     {
-        const ParticleComponent& particles = *static_cast<ParticleComponent*>(em.GetComponent(entity, ids.particle));
-        rasterizer::drawParticles(particles.system, viewProjection);
+        const ParticleComponent& particles = *static_cast<ParticleComponent*>(em.get_component(entity, ids.particle));
+        rasterizer::draw_particles(particles.system, viewProjection);
     }
 
     // Transparent pass: already sorted from back to front
     for (const Drawable& drawable : drawables)
     {
         if (drawable.opacity >= 1.0f) continue;
-        rasterizer::drawMesh(*drawable.mesh, drawable.model, viewProjection, *drawable.material, lights, cameraPosition, drawable.opacity);
+        rasterizer::draw_mesh(*drawable.mesh, drawable.model, viewProjection, *drawable.material, lights, cameraPosition, drawable.opacity);
     }
 }

@@ -13,9 +13,9 @@
 #include "Vec3.h"
 
 // Components are plain data: what an entity IS. What it DOES lives in the systems (Systems.h).
-// A new component type must also get an id in ComponentIDs (below) and be registered in registerComponents (Scene.cpp).
+// A new component type must also get an id in ComponentIDs (below) and be registered in register_components (Scene.cpp).
 
-// The componentID of each component type: what RegisterComponent returned for it.
+// The componentID of each component type: what register_component returned for it.
 // -1 until it is registered, which the asserts of the EntityManager catch.
 struct ComponentIDs
 {
@@ -50,7 +50,7 @@ struct TransformComponent
 
 	math::Mat4<float> model_matrix() const
 	{
-		return math::Mat4<float>::TRS(position, rotation, scale);
+		return math::Mat4<float>::trs(position, rotation, scale);
 	}
 };
 

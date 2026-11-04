@@ -13,7 +13,7 @@
 // The live drawing pipeline: everything the chapters taught that the engine still runs on.
 // It knows nothing about entities: the render system (RenderSystem.cpp) feeds it one mesh at a time.
 //
-// What drawMesh does to a mesh:
+// What draw_mesh does to a mesh:
 //   vertices -> clip space -> near plane clipping -> divide by w + viewport -> backface culling
 //            -> for each pixel of the triangle: depth test -> shader::shade -> framebuffer
 
@@ -33,18 +33,18 @@ namespace rasterizer
     float edge(const Pixel& a, const Pixel& b, const Pixel& p);
 
     // p * M, keeping w: the divide must wait until the triangle is clipped (chapter 12).
-    ClipVertex toClipSpace(const math::Mat4<float>& matrix, const math::Vector3<float>& p);
+    ClipVertex to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p);
 
     // Clips a triangle against the near plane. Writes 0, 3 or 6 vertices to out
     // and returns the number of triangles (0, 1 or 2) (chapter 12).
-    int clipTriangleNear(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6]);
+    int clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6]);
 
     // Draws a mesh placed in the world by its model matrix, with a material.
     // opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.
-    void drawMesh(const Mesh& mesh,
+    void draw_mesh(const Mesh& mesh,
         const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
         const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity);
 
     // Draws every particle of a system as one pixel.
-    void drawParticles(const ParticleSystem& system, const math::Mat4<float>& viewProjection);
+    void draw_particles(const ParticleSystem& system, const math::Mat4<float>& viewProjection);
 }

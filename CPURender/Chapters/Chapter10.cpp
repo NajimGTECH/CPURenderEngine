@@ -94,15 +94,15 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
 {
     const float aspect = static_cast<float>(WIDTH) / static_cast<float>(HEIGHT);
     const float fovY = 50.0f * std::numbers::pi_v<float> / 180.0f;
-    const math::Mat4<float> projection = math::Mat4<float>::Perspective(fovY, aspect, 0.1f, 100.0f);
+    const math::Mat4<float> projection = math::Mat4<float>::perspective(fovY, aspect, 0.1f, 100.0f);
 
-    const math::Mat4<float> view = math::Mat4<float>::LookAt(
+    const math::Mat4<float> view = math::Mat4<float>::look_at(
         math::Vector3<float>(0.0f, 0.0f, 3.0f),
         math::Vector3<float>(0.0f, 0.0f, 0.0f),
         math::Vector3<float>(0.0f, 1.0f, 0.0f));
 
-    const math::Mat4<float> model = math::Mat4<float>::Rotate(
-        math::Quaternion::FromAxisAngle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
+    const math::Mat4<float> model = math::Mat4<float>::rotate(
+        math::Quaternion::from_axis_angle(math::Vector3<float>(0.0f, 1.0f, 0.0f), seconds * 0.7f));
     const math::Mat4<float> modelView = model * view;
 
     // Light direction: unit vector pointing from the surface towards the light.
@@ -119,11 +119,11 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
 
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
-        const math::Vector3<float> cameraPos = modelView.MultiplyPointAffine(mesh.vertices[i]);
+        const math::Vector3<float> cameraPos = modelView.multiply_point_affine(mesh.vertices[i]);
         const float w = -cameraPos.z;
         if (w <= 0.0001f) continue;
 
-        const math::Vector3<float> ndc = projection.MultiplyPoint(cameraPos);
+        const math::Vector3<float> ndc = projection.multiply_point(cameraPos);
         projected[i].x = static_cast<int>((ndc.x + 1.0f) * 0.5f * WIDTH);
         projected[i].y = static_cast<int>((1.0f - ndc.y) * 0.5f * HEIGHT);
         projected[i].z = ndc.z;
@@ -150,7 +150,7 @@ void chapter_10(const Mesh& mesh, const Texture& meshTexture,
 
         // The model matrix is only a rotation here: it moves the normal
         // from local space to world space without changing its length.
-        const math::Vector3<float> normal = model.MultiplyPointAffine(faceNormals[faceIndex]);
+        const math::Vector3<float> normal = model.multiply_point_affine(faceNormals[faceIndex]);
         float diffuse = normal.x * light.x + normal.y * light.y + normal.z * light.z;
         diffuse = std::max(0.0f, diffuse); // A face turned away from the light gets no diffuse light.
         const float brightness = CHAPTER_10_AMBIENT + (1.0f - CHAPTER_10_AMBIENT) * diffuse;

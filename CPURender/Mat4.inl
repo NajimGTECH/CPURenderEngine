@@ -41,7 +41,7 @@ namespace math
     // ----------------------------
 
     template <typename T>
-    Mat4<T> Mat4<T>::Identity()
+    Mat4<T> Mat4<T>::identity()
     {
         Mat4<T> result;
         for (int i = 0; i < 4; ++i)
@@ -51,7 +51,7 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Zero()
+    Mat4<T> Mat4<T>::zero()
     {
         Mat4<T> result;
         for (int i = 0; i < 4; ++i)
@@ -61,13 +61,13 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::TRS(const Vector3<T>& position, const Quaternion& rotation, const Vector3<T>& scale)
+    Mat4<T> Mat4<T>::trs(const Vector3<T>& position, const Quaternion& rotation, const Vector3<T>& scale)
     {
         // Row vectors: p' = p * S * R * T, so the scale must be on the left of the rotation.
         // (The old code computed R * S, which rotates first and then scales along the world axes:
         //  wrong as soon as the scale is not uniform.)
-        Mat4<T> rot = Rotate(rotation);
-        Mat4<T> scl = Scale(scale);
+        Mat4<T> rot = rotate(rotation);
+        Mat4<T> scl = Mat4<T>::scale(scale);
         Mat4<T> trs = scl * rot;
         trs.m[3][0] = position.x;
         trs.m[3][1] = position.y;
@@ -77,10 +77,10 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Perspective(T fovYRadians, T aspect, T nearZ, T farZ)
+    Mat4<T> Mat4<T>::perspective(T fovYRadians, T aspect, T nearZ, T farZ)
     {
         T f = static_cast<T>(1) / std::tan(fovYRadians / static_cast<T>(2));
-        Mat4<T> result = Zero();
+        Mat4<T> result = zero();
 
         result.m[0][0] = f / aspect;
         result.m[1][1] = f;
@@ -95,9 +95,9 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Ortho(T left, T right, T bottom, T top, T nearZ, T farZ)
+    Mat4<T> Mat4<T>::ortho(T left, T right, T bottom, T top, T nearZ, T farZ)
     {
-        Mat4<T> result = Identity();
+        Mat4<T> result = identity();
         result.m[0][0] = static_cast<T>(2) / (right - left);
         result.m[1][1] = static_cast<T>(2) / (top - bottom);
         result.m[2][2] = static_cast<T>(-2) / (farZ - nearZ);
@@ -108,26 +108,26 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::LookAt(const Vector3<T>& eye, const Vector3<T>& target, const Vector3<T>& up)
+    Mat4<T> Mat4<T>::look_at(const Vector3<T>& eye, const Vector3<T>& target, const Vector3<T>& up)
     {
-        Vector3<T> zAxis = (eye - target).Normalized();
-        Vector3<T> xAxis = up.Cross(zAxis).Normalized();
-        Vector3<T> yAxis = zAxis.Cross(xAxis);
+        Vector3<T> zAxis = (eye - target).normalized();
+        Vector3<T> xAxis = up.cross(zAxis).normalized();
+        Vector3<T> yAxis = zAxis.cross(xAxis);
 
-        Mat4<T> result = Identity();
+        Mat4<T> result = identity();
         result.m[0][0] = xAxis.x; result.m[0][1] = yAxis.x; result.m[0][2] = zAxis.x;
         result.m[1][0] = xAxis.y; result.m[1][1] = yAxis.y; result.m[1][2] = zAxis.y;
         result.m[2][0] = xAxis.z; result.m[2][1] = yAxis.z; result.m[2][2] = zAxis.z;
-        result.m[3][0] = -xAxis.Dot(eye);
-        result.m[3][1] = -yAxis.Dot(eye);
-        result.m[3][2] = -zAxis.Dot(eye);
+        result.m[3][0] = -xAxis.dot(eye);
+        result.m[3][1] = -yAxis.dot(eye);
+        result.m[3][2] = -zAxis.dot(eye);
         return result;
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Translate(const Vector3<T>& position)
+    Mat4<T> Mat4<T>::translate(const Vector3<T>& position)
     {
-        Mat4<T> result = Identity();
+        Mat4<T> result = identity();
         result.m[3][0] = position.x;
         result.m[3][1] = position.y;
         result.m[3][2] = position.z;
@@ -135,9 +135,9 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Scale(const Vector3<T>& scale)
+    Mat4<T> Mat4<T>::scale(const Vector3<T>& scale)
     {
-        Mat4<T> result = Identity();
+        Mat4<T> result = identity();
         result.m[0][0] = scale.x;
         result.m[1][1] = scale.y;
         result.m[2][2] = scale.z;
@@ -145,9 +145,9 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Rotate(const Quaternion& rotation)
+    Mat4<T> Mat4<T>::rotate(const Quaternion& rotation)
     {
-        Mat4<T> result = Identity();
+        Mat4<T> result = identity();
         T xx = static_cast<T>(rotation.x) * static_cast<T>(rotation.x);
         T yy = static_cast<T>(rotation.y) * static_cast<T>(rotation.y);
         T zz = static_cast<T>(rotation.z) * static_cast<T>(rotation.z);
@@ -175,7 +175,7 @@ namespace math
     // ----------------------------
 
     template <typename T>
-    Mat4<T> Mat4<T>::Transpose() const
+    Mat4<T> Mat4<T>::transpose() const
     {
         Mat4<T> result;
         for (int i = 0; i < 4; ++i)
@@ -185,7 +185,7 @@ namespace math
     }
 
     template <typename T>
-    Mat4<T> Mat4<T>::Inverse() const
+    Mat4<T> Mat4<T>::inverse() const
     {
         T inv[16], det;
         const T* m = &this->m[0][0];
@@ -329,23 +329,23 @@ namespace math
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::ExtractPosition() const
+    Vector3<T> Mat4<T>::extract_position() const
     {
         return Vector3<T>(m[3][0], m[3][1], m[3][2]);
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::ExtractScale() const
+    Vector3<T> Mat4<T>::extract_scale() const
     {
         Vector3<T> scale;
-        scale.x = Vector3<T>(m[0][0], m[0][1], m[0][2]).Length();
-        scale.y = Vector3<T>(m[1][0], m[1][1], m[1][2]).Length();
-        scale.z = Vector3<T>(m[2][0], m[2][1], m[2][2]).Length();
+        scale.x = Vector3<T>(m[0][0], m[0][1], m[0][2]).length();
+        scale.y = Vector3<T>(m[1][0], m[1][1], m[1][2]).length();
+        scale.z = Vector3<T>(m[2][0], m[2][1], m[2][2]).length();
         return scale;
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::GetRow(int row) const
+    Vector3<T> Mat4<T>::get_row(int row) const
     {
         return Vector3<T>(
             m[row][0],
@@ -355,7 +355,7 @@ namespace math
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::GetColumn(int col) const
+    Vector3<T> Mat4<T>::get_column(int col) const
     {
         return Vector3<T>(
             m[0][col],
@@ -371,7 +371,7 @@ namespace math
     template <typename T>
     Mat4<T> Mat4<T>::operator*(const Mat4<T>& other) const
     {
-        Mat4<T> result = Mat4<T>::Zero();
+        Mat4<T> result = Mat4<T>::zero();
         for (int i = 0; i < 4; ++i)
         {
             for (int j = 0; j < 4; ++j)
@@ -386,7 +386,7 @@ namespace math
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::MultiplyPoint(const Vector3<T>& v) const
+    Vector3<T> Mat4<T>::multiply_point(const Vector3<T>& v) const
     {
         T x = v.x * m[0][0] + v.y * m[1][0] + v.z * m[2][0] + m[3][0];
         T y = v.x * m[0][1] + v.y * m[1][1] + v.z * m[2][1] + m[3][1];
@@ -404,7 +404,7 @@ namespace math
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::MultiplyPointAffine(const Vector3<T>& v) const
+    Vector3<T> Mat4<T>::multiply_point_affine(const Vector3<T>& v) const
     {
         return Vector3<T>(
             v.x * m[0][0] + v.y * m[1][0] + v.z * m[2][0] + m[3][0],
@@ -414,9 +414,9 @@ namespace math
     }
 
     template <typename T>
-    Vector3<T> Mat4<T>::MultiplyVector(const Vector3<T>& v) const
+    Vector3<T> Mat4<T>::multiply_vector(const Vector3<T>& v) const
     {
-        // Same row-vector convention as MultiplyPoint, but with w = 0 (no translation).
+        // Same row-vector convention as multiply_point, but with w = 0 (no translation).
         // (The old code used m[0][1], m[0][2] for x', i.e. the column-vector convention.)
         T x = v.x * m[0][0] + v.y * m[1][0] + v.z * m[2][0];
         T y = v.x * m[0][1] + v.y * m[1][1] + v.z * m[2][1];
@@ -425,7 +425,7 @@ namespace math
     }
 
     template <typename T>
-    T Mat4<T>::Determinant() const
+    T Mat4<T>::determinant() const
     {
         // Compute determinant via expansion by minors (3x3 determinants).
         auto det3 = [](T a1, T a2, T a3,
@@ -447,7 +447,7 @@ namespace math
     }
 
     template <typename T>
-    Quaternion Mat4<T>::ExtractRotation() const
+    Quaternion Mat4<T>::extract_rotation() const
     {
         // Convert upper-left 3x3 to quaternion using standard matrix-to-quaternion conversion.
         // Assumes matrix is rotation (possibly with scale). We remove scale first.
@@ -457,7 +457,7 @@ namespace math
         // r_ij = m[j][i] / scale_j.
         // (The old code divided by the column scale and did not transpose, so it returned the
         //  inverse rotation.)
-        Vector3<T> scale = ExtractScale();
+        Vector3<T> scale = extract_scale();
         T sx = scale.x, sy = scale.y, sz = scale.z;
         T invSx = (sx != static_cast<T>(0)) ? static_cast<T>(1) / sx : static_cast<T>(1);
         T invSy = (sy != static_cast<T>(0)) ? static_cast<T>(1) / sy : static_cast<T>(1);
@@ -514,7 +514,7 @@ namespace math
     }
 
     template <typename T>
-    bool Mat4<T>::ValidTRS() const
+    bool Mat4<T>::valid_trs() const
     {
         // Check last row is (0,0,0,1) and upper-left 3x3 is orthonormal up to scale.
         const double EPS = 1e-5;
@@ -524,23 +524,23 @@ namespace math
         if (std::fabs(static_cast<double>(m[3][3] - static_cast<T>(1))) > EPS) return false;
 
         // Row vectors: the axes of the transform are the rows 0, 1, 2 (not the columns).
-        Vector3<T> row0 = GetRow(0);
-        Vector3<T> row1 = GetRow(1);
-        Vector3<T> row2 = GetRow(2);
+        Vector3<T> row0 = get_row(0);
+        Vector3<T> row1 = get_row(1);
+        Vector3<T> row2 = get_row(2);
 
         // Non-zero scale?
-        Vector3<T> scale = ExtractScale();
+        Vector3<T> scale = extract_scale();
         if (scale.x == static_cast<T>(0) || scale.y == static_cast<T>(0) || scale.z == static_cast<T>(0))
             return false;
 
         // Normalize the axes and check that they are orthogonal
-        Vector3<T> n0 = row0.Normalized();
-        Vector3<T> n1 = row1.Normalized();
-        Vector3<T> n2 = row2.Normalized();
+        Vector3<T> n0 = row0.normalized();
+        Vector3<T> n1 = row1.normalized();
+        Vector3<T> n2 = row2.normalized();
 
-        double d01 = std::fabs(static_cast<double>(n0.Dot(n1)));
-        double d02 = std::fabs(static_cast<double>(n0.Dot(n2)));
-        double d12 = std::fabs(static_cast<double>(n1.Dot(n2)));
+        double d01 = std::fabs(static_cast<double>(n0.dot(n1)));
+        double d02 = std::fabs(static_cast<double>(n0.dot(n2)));
+        double d12 = std::fabs(static_cast<double>(n1.dot(n2)));
 
         if (d01 > EPS || d02 > EPS || d12 > EPS) return false;
 

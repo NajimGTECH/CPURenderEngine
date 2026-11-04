@@ -7,7 +7,7 @@
 
 // A face corner can be "12", "12/3", "12/3/4" or "12//4" (vertex/texture/normal).
 // We read the vertex index and the texture index (0 if there is none). Both are still 1-based here.
-static void readFaceCorner(const std::string& token, int& vertexIndex, int& uvIndex)
+static void read_face_corner(const std::string& token, int& vertexIndex, int& uvIndex)
 {
     const size_t firstSlash = token.find('/');
     vertexIndex = std::stoi(token.substr(0, firstSlash));
@@ -23,7 +23,7 @@ static void readFaceCorner(const std::string& token, int& vertexIndex, int& uvIn
 
 // Computes one unit normal per face, in the model's local space.
 // The cross product of two edges gives a direction perpendicular to the triangle.
-static std::vector<math::Vector3<float>> computeFaceNormals(const Mesh& mesh)
+static std::vector<math::Vector3<float>> compute_face_normals(const Mesh& mesh)
 {
     std::vector<math::Vector3<float>> normals;
     normals.reserve(mesh.faces.size());
@@ -57,7 +57,7 @@ static std::vector<math::Vector3<float>> computeFaceNormals(const Mesh& mesh)
 // One normal per VERTEX: the sum of the normals of the faces touching it, normalized.
 // Two neighbouring triangles then share the same normal on their common corners:
 // the interpolated normal no longer jumps from one triangle to the next, and the facets disappear.
-static std::vector<math::Vector3<float>> computeVertexNormals(const Mesh& mesh,
+static std::vector<math::Vector3<float>> compute_vertex_normals(const Mesh& mesh,
     const std::vector<math::Vector3<float>>& faceNormals)
 {
     std::vector<math::Vector3<float>> normals(mesh.vertices.size());
@@ -70,11 +70,11 @@ static std::vector<math::Vector3<float>> computeVertexNormals(const Mesh& mesh,
         normals[face.c] += faceNormals[faceIndex];
     }
 
-    for (math::Vector3<float>& normal : normals) normal.Normalize();
+    for (math::Vector3<float>& normal : normals) normal.normalize();
     return normals;
 }
 
-bool mesh::loadObj(const std::string& path, Mesh& outMesh)
+bool mesh::load_obj(const std::string& path, Mesh& outMesh)
 {
     std::ifstream file(path);
     if (!file.is_open()) { SDL_Log("Could not open %s", path.c_str()); return false; }
@@ -115,9 +115,9 @@ bool mesh::loadObj(const std::string& path, Mesh& outMesh)
             if (stream >> tokenA >> tokenB >> tokenC)
             {
                 Face face;
-                readFaceCorner(tokenA, face.a, face.uvA);
-                readFaceCorner(tokenB, face.b, face.uvB);
-                readFaceCorner(tokenC, face.c, face.uvC);
+                read_face_corner(tokenA, face.a, face.uvA);
+                read_face_corner(tokenB, face.b, face.uvB);
+                read_face_corner(tokenC, face.c, face.uvC);
 
                 // OBJ indices start at 1, C++ arrays start at 0 -> subtract 1
                 // (a missing UV index was 0, so it becomes -1)
@@ -153,8 +153,8 @@ bool mesh::loadObj(const std::string& path, Mesh& outMesh)
     }
 
     // Only once every index is known to be valid
-    outMesh.faceNormals = computeFaceNormals(outMesh);
-    outMesh.vertexNormals = computeVertexNormals(outMesh, outMesh.faceNormals);
+    outMesh.faceNormals = compute_face_normals(outMesh);
+    outMesh.vertexNormals = compute_vertex_normals(outMesh, outMesh.faceNormals);
 
     return true;
 }

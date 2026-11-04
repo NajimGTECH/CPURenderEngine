@@ -27,9 +27,9 @@ float rasterizer::edge(const Pixel& a, const Pixel& b, const Pixel& p)
     return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
 }
 
-// p * M with p = (x, y, z, 1), keeping w: MultiplyPoint would already divide by w,
+// p * M with p = (x, y, z, 1), keeping w: multiply_point would already divide by w,
 // which is exactly what we must avoid until the triangle is clipped.
-ClipVertex rasterizer::toClipSpace(const math::Mat4<float>& matrix, const math::Vector3<float>& p)
+ClipVertex rasterizer::to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p)
 {
     ClipVertex vertex;
     vertex.x = p.x * matrix(0, 0) + p.y * matrix(1, 0) + p.z * matrix(2, 0) + matrix(3, 0);
@@ -40,7 +40,7 @@ ClipVertex rasterizer::toClipSpace(const math::Mat4<float>& matrix, const math::
 }
 
 // Interpolates ALL the attributes: a * (1 - t) + b * t.
-static ClipVertex lerpVertex(const ClipVertex& a, const ClipVertex& b, float t)
+static ClipVertex lerp_vertex(const ClipVertex& a, const ClipVertex& b, float t)
 {
     ClipVertex result;
     result.x = a.x + t * (b.x - a.x);
@@ -56,7 +56,7 @@ static ClipVertex lerpVertex(const ClipVertex& a, const ClipVertex& b, float t)
 
 // Signed distance to the near plane, in clip space units. Positive = in front of the near plane (kept).
 // In front of near <=> z / w >= -1 <=> z + w >= 0: the test works without dividing by w.
-static float nearDistance(const ClipVertex& vertex)
+static float near_distance(const ClipVertex& vertex)
 {
     return vertex.z + vertex.w;
 }
@@ -69,7 +69,7 @@ static float nearDistance(const ClipVertex& vertex)
 //  - both behind                    -> nothing
 // The resulting polygon has 0, 3 or 4 vertices; a quad is split into 2 triangles (0,1,2) and (0,2,3).
 // Writes 0, 3 or 6 vertices to out and returns the number of triangles (0, 1 or 2).
-int rasterizer::clipTriangleNear(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6])
+int rasterizer::clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, const ClipVertex& vC, ClipVertex out[6])
 {
     const ClipVertex triangle[3] = { vA, vB, vC };
     ClipVertex polygon[4]; // a triangle cut by ONE plane gives at most 4 vertices
@@ -79,13 +79,13 @@ int rasterizer::clipTriangleNear(const ClipVertex& vA, const ClipVertex& vB, con
     {
         const ClipVertex& a = triangle[edge];
         const ClipVertex& b = triangle[(edge + 1) % 3];
-        const float distanceA = nearDistance(a);
-        const float distanceB = nearDistance(b);
+        const float distanceA = near_distance(a);
+        const float distanceB = near_distance(b);
         const bool aInside = distanceA >= 0.0f;
         const bool bInside = distanceB >= 0.0f;
 
         // The edge crosses the plane: the crossing is at the fraction t where the distance is zero
-        if (aInside != bInside) polygon[count++] = lerpVertex(a, b, distanceA / (distanceA - distanceB));
+        if (aInside != bInside) polygon[count++] = lerp_vertex(a, b, distanceA / (distanceA - distanceB));
         if (bInside) polygon[count++] = b;
     }
 
@@ -100,7 +100,7 @@ int rasterizer::clipTriangleNear(const ClipVertex& vA, const ClipVertex& vB, con
 
 // "Over" blending: lays a colour on top of what is already in the framebuffer.
 // result = color * opacity + background * (1 - opacity)
-static Color3 blendOverFramebuffer(const Color3& color, int index, float opacity)
+static Color3 blend_over_framebuffer(const Color3& color, int index, float opacity)
 {
     // frameBuffer uses ARGB8888 (0xAARRGGBB).
     const uint32_t background = frameBuffer[index];
@@ -122,7 +122,7 @@ static Color3 blendOverFramebuffer(const Color3& color, int index, float opacity
 // The rule keeps the pixels on the top and left edges of a triangle and drops the others.
 // With the winding left after the swap (clockwise on screen, Y down), a "top" edge is horizontal
 // and goes right, a "left" edge goes up.
-static bool isTopLeftEdge(const Pixel& from, const Pixel& to)
+static bool is_top_left_edge(const Pixel& from, const Pixel& to)
 {
     const int dx = to.x - from.x;
     const int dy = to.y - from.y;
@@ -132,7 +132,7 @@ static bool isTopLeftEdge(const Pixel& from, const Pixel& to)
 // Same fill as chapter 11, but the rasterizer no longer knows anything about lighting:
 // it builds one Fragment per pixel and the shader decides its colour.
 // opacity < 1 blends the pixel over the framebuffer instead of replacing it.
-static void drawTriangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
+static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
     const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
     float area = rasterizer::edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
@@ -156,9 +156,9 @@ static void drawTriangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, cons
     const bool transparent = opacity < 1.0f;
 
     // Each edge value below is named after the vertex facing that edge (edgeA is edge B->C)
-    const bool topLeftA = isTopLeftEdge(pB, pC);
-    const bool topLeftB = isTopLeftEdge(pC, pA);
-    const bool topLeftC = isTopLeftEdge(pA, pB);
+    const bool topLeftA = is_top_left_edge(pB, pC);
+    const bool topLeftB = is_top_left_edge(pC, pA);
+    const bool topLeftC = is_top_left_edge(pA, pB);
 
     // Like in chapter 9: every attribute interpolated under perspective is pre-divided by w,
     // the world position included.
@@ -202,7 +202,7 @@ static void drawTriangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, cons
             fragment.uv.v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
             fragment.position = (pOverWA * weightA + pOverWB * weightB + pOverWC * weightC) / invW;
             fragment.normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
-            fragment.normal.Normalize(); // see chapter 11
+            fragment.normal.normalize(); // see chapter 11
 
             Color3 color = shader::shade(fragment, material, lights, cameraPosition);
 
@@ -210,7 +210,7 @@ static void drawTriangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, cons
             {
                 // Transparent fragments only TEST the depth, they don't write it:
                 // a see-through surface must not hide what gets drawn after it.
-                color = blendOverFramebuffer(color, index, opacity);
+                color = blend_over_framebuffer(color, index, opacity);
             }
             else
             {
@@ -223,7 +223,7 @@ static void drawTriangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, cons
 
 // An already clipped triangle (against the near plane, chapter 12):
 // divide by w, viewport, backface culling, then the shader rasterizer.
-static void projectAndDraw(const ClipVertex triangle[3], const Material& material,
+static void project_and_draw(const ClipVertex triangle[3], const Material& material,
     const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
     ShaderVertex projected[3];
@@ -243,14 +243,14 @@ static void projectAndDraw(const ClipVertex triangle[3], const Material& materia
     if (rasterizer::edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    drawTriangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
+    draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
 }
 
 // Draws a mesh placed in the world by its model matrix, with a material.
 // Same pipeline as chapter 12 (clip space -> near clipping -> raster),
 // the vertices also keep their world position for the shader.
 // opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.
-void rasterizer::drawMesh(const Mesh& mesh,
+void rasterizer::draw_mesh(const Mesh& mesh,
     const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
     const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
 {
@@ -260,9 +260,9 @@ void rasterizer::drawMesh(const Mesh& mesh,
     std::vector<ClipVertex> clipVertices(mesh.vertices.size());
     for (size_t i = 0; i < mesh.vertices.size(); i++)
     {
-        clipVertices[i] = toClipSpace(modelViewProjection, mesh.vertices[i]);
-        clipVertices[i].normal = model.MultiplyVector(mesh.vertexNormals[i]);
-        clipVertices[i].worldPosition = model.MultiplyPointAffine(mesh.vertices[i]);
+        clipVertices[i] = to_clip_space(modelViewProjection, mesh.vertices[i]);
+        clipVertices[i].normal = model.multiply_vector(mesh.vertexNormals[i]);
+        clipVertices[i].worldPosition = model.multiply_point_affine(mesh.vertices[i]);
     }
 
     // An opaque mesh can draw its faces in any order: the depth buffer sorts them out.
@@ -273,12 +273,12 @@ void rasterizer::drawMesh(const Mesh& mesh,
     for (size_t i = 0; i < faceOrder.size(); ++i) faceOrder[i] = i;
     if (opacity < 1.0f)
     {
-        auto averageW = [&](size_t i) {
+        auto average_w = [&](size_t i) {
             const Face& f = mesh.faces[i];
             return (clipVertices[f.a].w + clipVertices[f.b].w + clipVertices[f.c].w) / 3.0f;
             };
         std::stable_sort(faceOrder.begin(), faceOrder.end(), [&](size_t a, size_t b) {
-            return averageW(a) > averageW(b); // farther first
+            return average_w(a) > average_w(b); // farther first
             });
     }
 
@@ -294,16 +294,16 @@ void rasterizer::drawMesh(const Mesh& mesh,
         vC.uv = (face.uvC >= 0) ? mesh.uvs[face.uvC] : UV{};
 
         ClipVertex clipped[6];
-        const int triangleCount = clipTriangleNear(vA, vB, vC, clipped);
+        const int triangleCount = clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            projectAndDraw(&clipped[t * 3], material, lights, cameraPosition, opacity);
+            project_and_draw(&clipped[t * 3], material, lights, cameraPosition, opacity);
         }
     }
 }
 
 // [0, 1] colour -> [0, 255] pixel colour, clamped: added particles quickly go past 1.
-static Color3 toColor3(const math::Vector3<float>& color)
+static Color3 to_color3(const math::Vector3<float>& color)
 {
     return Color3{
         static_cast<uint8_t>(std::clamp(static_cast<int>(color.x * 255.0f), 0, 255)),
@@ -314,7 +314,7 @@ static Color3 toColor3(const math::Vector3<float>& color)
 
 // "Additive" blending: result = background + color * amount.
 // Adding light never depends on the order, so unlike the transparent cows the particles need no sorting.
-static Color3 blendAdd(const math::Vector3<float>& color, int index, float amount)
+static Color3 blend_add(const math::Vector3<float>& color, int index, float amount)
 {
     // frameBuffer uses ARGB8888 (0xAARRGGBB).
     const uint32_t background = frameBuffer[index];
@@ -323,17 +323,17 @@ static Color3 blendAdd(const math::Vector3<float>& color, int index, float amoun
         static_cast<float>((background >> 8) & 0xFF) / 255.0f,
         static_cast<float>(background & 0xFF) / 255.0f);
 
-    return toColor3(backgroundColor + color * amount);
+    return to_color3(backgroundColor + color * amount);
 }
 
 // Draws every particle of a system as one pixel.
 // Same projection as a mesh vertex (chapter 12), then the depth test, so the cows hide the particles behind them.
-void rasterizer::drawParticles(const ParticleSystem& system, const math::Mat4<float>& viewProjection)
+void rasterizer::draw_particles(const ParticleSystem& system, const math::Mat4<float>& viewProjection)
 {
     for (const Particle& particle : system.particles)
     {
         // A particle is a single point: no clipping needed, it is either on screen or not.
-        const ClipVertex clip = toClipSpace(viewProjection, particle.position);
+        const ClipVertex clip = to_clip_space(viewProjection, particle.position);
         if (clip.w <= 0.0001f) continue; // behind the camera
 
         const float invW = 1.0f / clip.w;
@@ -353,18 +353,18 @@ void rasterizer::drawParticles(const ParticleSystem& system, const math::Mat4<fl
         if (particle.blend == ParticleBlend::Intensity)
         {
             // Fades out with age. Squared, so it stays bright most of its life and dies off quickly at the end.
-            float fade = particle::lifeLeft(particle);
+            float fade = particle::life_left(particle);
             fade *= fade;
 
             // Like the transparent cows: test the depth, don't write it,
             // so the glowing particles behind this one still add their light.
-            add_pixel_to_buffer(Pixel{ x, y, blendAdd(particle.color, index, fade) });
+            add_pixel_to_buffer(Pixel{ x, y, blend_add(particle.color, index, fade) });
         }
         else
         {
             // A solid particle hides what is behind it, like an opaque triangle
             depthBuffer[index] = z;
-            add_pixel_to_buffer(Pixel{ x, y, toColor3(particle.color) });
+            add_pixel_to_buffer(Pixel{ x, y, to_color3(particle.color) });
         }
     }
 }

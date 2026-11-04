@@ -8,5 +8,5 @@ void add_pixel_to_buffer(Pixel px)
 {
     if (px.x < 0 || px.x >= WIDTH || px.y < 0 || px.y >= HEIGHT) { SDL_Log("Pixel out of screen"); return; }
 
-    frameBuffer[px.y * WIDTH + px.x] = px.color.toRGB();
+    frameBuffer[px.y * WIDTH + px.x] = px.color.to_rgb();
 }

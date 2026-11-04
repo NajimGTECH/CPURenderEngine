@@ -2,7 +2,7 @@
 
 // Wang hash: scrambles the bits of a number, so consecutive seeds give unrelated results.
 // Much cheaper than std::mt19937 when thousands of particles are spawned each second.
-static uint32_t wangHash(uint32_t seed)
+static uint32_t wang_hash(uint32_t seed)
 {
     seed = (seed ^ 61u) ^ (seed >> 16);
     seed *= 9u;
@@ -15,27 +15,27 @@ static uint32_t wangHash(uint32_t seed)
 // Random float in [0, 1). The seed moves forward, so the next call gives another number.
 static float random01(uint32_t& seed)
 {
-    seed = wangHash(seed);
+    seed = wang_hash(seed);
     return (seed & 0x00FFFFFFu) / 16777216.0f; // keep 24 bits: exactly what a float can hold
 }
 
 // Random float in [-1, 1)
-static float randomSigned(uint32_t& seed)
+static float random_signed(uint32_t& seed)
 {
     return random01(seed) * 2.0f - 1.0f;
 }
 
 // One random value per axis, each in [-1, 1)
-static math::Vector3<float> randomSignedVector(uint32_t& seed)
+static math::Vector3<float> random_signed_vector(uint32_t& seed)
 {
-    const float x = randomSigned(seed);
-    const float y = randomSigned(seed);
-    const float z = randomSigned(seed);
+    const float x = random_signed(seed);
+    const float y = random_signed(seed);
+    const float z = random_signed(seed);
     return math::Vector3<float>(x, y, z);
 }
 
 // A particle that leaves the box is put back on its side, and its speed on that axis is reversed.
-static void applyBounds(Particle& particle, const ParticlePhysics& physics)
+static void apply_bounds(Particle& particle, const ParticlePhysics& physics)
 {
     float* position[3] = { &particle.position.x, &particle.position.y, &particle.position.z };
     float* velocity[3] = { &particle.velocity.x, &particle.velocity.y, &particle.velocity.z };
@@ -81,18 +81,18 @@ void particle::emit(ParticleEmitter& emitter, ParticleSystem& system, float delt
         Particle particle;
 
         // Somewhere in a small cube around the emitter
-        particle.position = emitter.position + randomSignedVector(emitter.seed) * emitter.spawnRadius;
+        particle.position = emitter.position + random_signed_vector(emitter.seed) * emitter.spawnRadius;
 
         // The emitter direction, bent at random by the spread, thrown at a random speed
         const float speed = emitter.speedMin + (emitter.speedMax - emitter.speedMin) * random01(emitter.seed);
-        particle.velocity = (emitter.direction + randomSignedVector(emitter.seed) * emitter.spread) * speed;
+        particle.velocity = (emitter.direction + random_signed_vector(emitter.seed) * emitter.spread) * speed;
 
         particle.duration = emitter.durationMin + (emitter.durationMax - emitter.durationMin) * random01(emitter.seed);
 
         // A colour between the two bounds, a bit darker or brighter so the cloud doesn't look flat
         const float colorRatio = random01(emitter.seed);
         const float intensity = 0.8f + 0.2f * random01(emitter.seed);
-        particle.color = math::Vector3<float>::Lerp(emitter.colorMin, emitter.colorMax, colorRatio) * intensity;
+        particle.color = math::Vector3<float>::lerp(emitter.colorMin, emitter.colorMax, colorRatio) * intensity;
 
         particle.blend = emitter.blend;
         system.particles.push_back(particle);
@@ -129,9 +129,9 @@ void particle::update(ParticleSystem& system, float deltaTime)
         math::Vector3<float> velocity = particle.velocity * dragFactor;
         velocity += physics.gravity * deltaTime;
 
-        if (physics.maxSpeed > 0.0f && velocity.LengthSquared() > maxSpeedSquared)
+        if (physics.maxSpeed > 0.0f && velocity.length_squared() > maxSpeedSquared)
         {
-            velocity = velocity.Normalized() * physics.maxSpeed;
+            velocity = velocity.normalized() * physics.maxSpeed;
         }
 
         // Semi-implicit Euler: the position moves with the NEW velocity. Plain Euler (old velocity)
@@ -139,11 +139,11 @@ void particle::update(ParticleSystem& system, float deltaTime)
         particle.velocity = velocity;
         particle.position += velocity * deltaTime;
 
-        if (physics.useBounds) applyBounds(particle, physics);
+        if (physics.useBounds) apply_bounds(particle, physics);
     }
 }
 
-float particle::lifeLeft(const Particle& particle)
+float particle::life_left(const Particle& particle)
 {
     return 1.0f - particle.age / particle.duration;
 }

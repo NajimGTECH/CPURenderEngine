@@ -21,7 +21,7 @@ namespace math
      * - **Rows 0, 1, 2** are the images of the X, Y and Z axes. **Row 3** holds the translation.
      *   Column 3 is (0, 0, 0, 1) for an affine matrix.
      * - **Composition order**: `A * B` applies A first, then B (`p * A * B = (p * A) * B`).
-     *   A classic object transform is therefore `Scale * Rotate * Translate`.
+     *   A classic object transform is therefore `scale * rotate * translate`.
      * - **Points** use w = 1 (translation applied), **directions** use w = 0 (translation ignored).
      *
      * This is the same convention as DirectX / DirectXMath (and the transpose of the OpenGL/GLM one).
@@ -61,18 +61,18 @@ namespace math
          * @brief Returns the identity matrix.
          * @return A 4x4 identity matrix.
          */
-        static Mat4<T> Identity();
+        static Mat4<T> identity();
 
         /**
          * @brief Returns a zero-filled matrix.
          * @return A 4x4 zero matrix.
          */
-        static Mat4<T> Zero();
+        static Mat4<T> zero();
 
         /**
          * @brief Builds a transformation matrix from translation, rotation, and scale.
          *
-         * The result is `Scale(scale) * Rotate(rotation) * Translate(position)`:
+         * The result is `scale(scale) * rotate(rotation) * translate(position)`:
          * a point is first scaled, then rotated, then translated.
          * @param position Translation vector.
          * @param rotation Rotation quaternion.
@@ -81,14 +81,14 @@ namespace math
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_TRS
          */
-        static Mat4<T> TRS(const Vector3<T>& position, const Quaternion& rotation, const Vector3<T>& scale);
+        static Mat4<T> trs(const Vector3<T>& position, const Quaternion& rotation, const Vector3<T>& scale);
 
         /**
          * @brief Builds a perspective projection matrix (right-handed, camera looks down -Z,
          *        NDC depth in [-1, 1], OpenGL-style values stored for row vectors).
          *
          * A point at z = -nearZ is mapped to NDC depth -1, a point at z = -farZ to +1
-         * (after the perspective divide done by MultiplyPoint).
+         * (after the perspective divide done by multiply_point).
          * @param fovYRadians Field of view in radians.
          * @param aspect Aspect ratio.
          * @param nearZ Near clipping plane.
@@ -97,7 +97,7 @@ namespace math
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_Perspective
          */
-        static Mat4<T> Perspective(T fovYRadians, T aspect, T nearZ, T farZ);
+        static Mat4<T> perspective(T fovYRadians, T aspect, T nearZ, T farZ);
 
         /**
          * @brief Builds an orthographic projection matrix.
@@ -111,10 +111,10 @@ namespace math
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_Ortho
          */
-        static Mat4<T> Ortho(T left, T right, T bottom, T top, T nearZ, T farZ);
+        static Mat4<T> ortho(T left, T right, T bottom, T top, T nearZ, T farZ);
 
         /**
-         * @brief Builds a LookAt view matrix.
+         * @brief Builds a look_at view matrix.
          * @param eye Camera position.
          * @param target Target position.
          * @param up Up vector.
@@ -122,26 +122,26 @@ namespace math
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_LookAt
          */
-        static Mat4<T> LookAt(const Vector3<T>& eye, const Vector3<T>& target, const Vector3<T>& up);
+        static Mat4<T> look_at(const Vector3<T>& eye, const Vector3<T>& target, const Vector3<T>& up);
 
         /**
          * @brief Returns a transposed copy of this matrix.
          * @return The transposed matrix.
          */
-        Mat4<T> Transpose() const;
+        Mat4<T> transpose() const;
 
         /**
          * @brief Returns the inverse of this matrix.
          * @return The inverted matrix.
          * @throws std::runtime_error if the matrix is singular.
          */
-        Mat4<T> Inverse() const;
+        Mat4<T> inverse() const;
 
         /**
          * @brief Computes the determinant of this matrix.
          * @return The determinant value.
          */
-        T Determinant() const;
+        T determinant() const;
 
         /**
          * @brief Multiplies this matrix with another.
@@ -156,13 +156,13 @@ namespace math
          * @brief Multiplies this matrix by a 3D point (assuming w=1).
          *
          * Computes (x', y', z', w') = (x, y, z, 1) * M. If w' is neither 0 nor 1 the result is
-         * divided by w' (perspective divide). Use MultiplyPointAffine for the affine case.
+         * divided by w' (perspective divide). Use multiply_point_affine for the affine case.
          * @param v The input 3D point.
          * @return The transformed point.
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_MultiplyPoint
          */
-        Vector3<T> MultiplyPoint(const Vector3<T>& v) const;
+        Vector3<T> multiply_point(const Vector3<T>& v) const;
 
         /**
          * @brief Transforms a 3D point by an affine matrix (implicit w = 1, no perspective divide).
@@ -173,33 +173,33 @@ namespace math
          * @param v The input 3D point.
          * @return The transformed point.
          */
-        Vector3<T> MultiplyPointAffine(const Vector3<T>& v) const;
+        Vector3<T> multiply_point_affine(const Vector3<T>& v) const;
 
         /**
          * @brief Multiplies this matrix by a direction vector (w = 0, ignores translation).
          *
-         * Same row-vector convention as MultiplyPoint: x' = x*m[0][0] + y*m[1][0] + z*m[2][0].
+         * Same row-vector convention as multiply_point: x' = x*m[0][0] + y*m[1][0] + z*m[2][0].
          * @param v The input 3D vector.
          * @return The transformed direction.
          *
          * @snippet Mat4_Class_Examples.cpp Mat4_MultiplyVector
          */
-        Vector3<T> MultiplyVector(const Vector3<T>& v) const;
+        Vector3<T> multiply_vector(const Vector3<T>& v) const;
 
         /**
          * @brief Extracts the rotation component as a quaternion.
          * @return The extracted rotation.
          */
-        Quaternion ExtractRotation() const;
+        Quaternion extract_rotation() const;
 
         /**
-         * @brief Returns true if this matrix represents a valid TRS transform.
+         * @brief Returns true if this matrix represents a valid trs transform.
          *
          * Column 3 must be (0, 0, 0, 1) and the three axis rows must be orthogonal
          * with a non-zero length (tolerance 1e-5).
-         * @return True if valid TRS, false otherwise.
+         * @return True if valid trs, false otherwise.
          */
-        bool ValidTRS() const;
+        bool valid_trs() const;
 
         /**
          * @brief Checks equality between two matrices (with tolerance).
@@ -219,7 +219,7 @@ namespace math
          * @brief Extracts the translation component of the matrix.
          * @return The extracted position as a Vector3.
          */
-        Vector3<T> ExtractPosition() const;
+        Vector3<T> extract_position() const;
 
         /**
          * @brief Extracts the scale component of the matrix.
@@ -227,42 +227,42 @@ namespace math
          * The scale on each axis is the length of the corresponding axis row (rows 0, 1, 2).
          * @return The extracted scale as a Vector3.
          */
-        Vector3<T> ExtractScale() const;
+        Vector3<T> extract_scale() const;
 
         /**
          * @brief Returns a specific row of the matrix as a Vector3.
          * @param index The row index (0 to 3).
          * @return The row as a Vector3.
          */
-        Vector3<T> GetRow(int index) const;
+        Vector3<T> get_row(int index) const;
 
         /**
          * @brief Returns a specific column of the matrix as a Vector3.
          * @param index The column index (0 to 3).
          * @return The column as a Vector3.
          */
-        Vector3<T> GetColumn(int index) const;
+        Vector3<T> get_column(int index) const;
 
         /**
          * @brief Creates a translation matrix.
          * @param position The translation vector.
          * @return The translation matrix.
          */
-        static Mat4<T> Translate(const Vector3<T>& position);
+        static Mat4<T> translate(const Vector3<T>& position);
 
         /**
          * @brief Creates a uniform scaling matrix.
          * @param scale The scaling vector.
          * @return The scaling matrix.
          */
-        static Mat4<T> Scale(const Vector3<T>& scale);
+        static Mat4<T> scale(const Vector3<T>& scale);
 
         /**
          * @brief Creates a rotation matrix from a quaternion.
          * @param rotation The rotation quaternion.
          * @return The rotation matrix.
          */
-        static Mat4<T> Rotate(const Quaternion& rotation);
+        static Mat4<T> rotate(const Quaternion& rotation);
 
         /**
          * @brief Provides access to an element of the matrix by row and column.

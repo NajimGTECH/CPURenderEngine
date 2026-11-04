@@ -14,14 +14,14 @@ namespace math
 
     Quaternion::~Quaternion() = default;
 
-    Quaternion Quaternion::Identity()
+    Quaternion Quaternion::identity()
     {
         return Quaternion(1.0f, 0.0f, 0.0f, 0.0f);
     }
 
-    Quaternion Quaternion::FromAxisAngle(const Vector3<float>& axis, float angleRadians)
+    Quaternion Quaternion::from_axis_angle(const Vector3<float>& axis, float angleRadians)
     {
-        Vector3<float> normAxis = axis.Normalized();
+        Vector3<float> normAxis = axis.normalized();
 
         float halfAngle = angleRadians * 0.5f;
 
@@ -31,7 +31,7 @@ namespace math
         return Quaternion(c, normAxis.x * s, normAxis.y * s, normAxis.z * s);
     }
 
-    Quaternion Quaternion::FromEuler(const Vector3<float>& euler)
+    Quaternion Quaternion::from_euler(const Vector3<float>& euler)
     {
         float cx = std::cos(euler.x * 0.5f);
         float sx = std::sin(euler.x * 0.5f);
@@ -49,22 +49,22 @@ namespace math
         return q;
     }
 
-    Quaternion Quaternion::FromToRotation(const Vector3<float>& from, const Vector3<float>& to)
+    Quaternion Quaternion::from_to_rotation(const Vector3<float>& from, const Vector3<float>& to)
     {
-        Vector3<float> f = from.Normalized();
-        Vector3<float> t = to.Normalized();
+        Vector3<float> f = from.normalized();
+        Vector3<float> t = to.normalized();
 
-        float dot = f.Dot(t);
+        float dot = f.dot(t);
         dot = std::clamp(dot, -1.0f, 1.0f);
 
-        if (dot > 0.9999f) return Identity();
+        if (dot > 0.9999f) return identity();
         if (dot < -0.9999f)
         {
             Vector3<float> axis = std::fabs(f.x) > std::fabs(f.z)
                 ? Vector3<float>(-f.y, f.x, 0.0f)
                 : Vector3<float>(0.0f, -f.z, f.y);
 
-            return FromAxisAngle(axis, 3.1415926535f); // Pi rad -> 180�
+            return from_axis_angle(axis, 3.1415926535f); // Pi rad -> 180�
         }
 
         Vector3<float> cross =
@@ -80,11 +80,11 @@ namespace math
         return Quaternion(sqrt * 0.5f, cross.x * invSqrt, cross.y * invSqrt, cross.z * invSqrt);
     }
 
-    Quaternion Quaternion::LookRotation(const Vector3<float>& forward, const Vector3<float>& up)
+    Quaternion Quaternion::look_rotation(const Vector3<float>& forward, const Vector3<float>& up)
     {
-        Vector3<float> f = forward.Normalized();
-        Vector3<float> r = up.Normalized().Cross(f).Normalized();
-        Vector3<float> u = f.Cross(r);
+        Vector3<float> f = forward.normalized();
+        Vector3<float> r = up.normalized().cross(f).normalized();
+        Vector3<float> u = f.cross(r);
 
         float m00 = r.x, m01 = u.x, m02 = f.x;
         float m10 = r.y, m11 = u.y, m12 = f.y;
@@ -125,26 +125,26 @@ namespace math
             q.y = (m12 + m21) / s;
             q.z = 0.25f * s;
         }
-        return q.Normalized();
+        return q.normalized();
     }
 
-    Quaternion Quaternion::Normalized() const
+    Quaternion Quaternion::normalized() const
     {
-        float magSq = GetMagnitudeSquared();
-        if (magSq == 0.0f) return Identity();
+        float magSq = get_magnitude_squared();
+        if (magSq == 0.0f) return identity();
 
         float inv = 1.0f / std::sqrt(magSq);
 
         return { w * inv, x * inv, y * inv, z * inv };
     }
 
-    void Quaternion::Normalize()
+    void Quaternion::normalize()
     {
-        float magSq = GetMagnitudeSquared();
+        float magSq = get_magnitude_squared();
 
         if (magSq == 0.0f)
         {
-            *this = Identity();
+            *this = identity();
             return;
         }
 
@@ -152,32 +152,32 @@ namespace math
         w *= inv; x *= inv; y *= inv; z *= inv;
     }
 
-    Quaternion Quaternion::Conjugate() const { return { w, -x, -y, -z }; }
+    Quaternion Quaternion::conjugate() const { return { w, -x, -y, -z }; }
 
-    Quaternion Quaternion::Inverse() const
+    Quaternion Quaternion::inverse() const
     {
-        float magSq = GetMagnitudeSquared();
-        if (magSq == 0.0f) return Identity();
+        float magSq = get_magnitude_squared();
+        if (magSq == 0.0f) return identity();
 
-        Quaternion qc = Conjugate();
+        Quaternion qc = conjugate();
 
         float invMagSq = 1.0f / magSq;
 
         return { qc.w * invMagSq, qc.x * invMagSq, qc.y * invMagSq, qc.z * invMagSq };
     }
 
-    float Quaternion::Dot(const Quaternion& a, const Quaternion& b)
+    float Quaternion::dot(const Quaternion& a, const Quaternion& b)
     {
         return a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
     }
 
-    float Quaternion::Magnitude() const { return std::sqrt(GetMagnitudeSquared()); }
+    float Quaternion::magnitude() const { return std::sqrt(get_magnitude_squared()); }
 
-    float Quaternion::GetMagnitudeSquared() const { return w * w + x * x + y * y + z * z; }
+    float Quaternion::get_magnitude_squared() const { return w * w + x * x + y * y + z * z; }
 
-    float Quaternion::Angle(const Quaternion& a, const Quaternion& b)
+    float Quaternion::angle(const Quaternion& a, const Quaternion& b)
     {
-        float dot = std::clamp(Dot(a.Normalized(), b.Normalized()), -1.0f, 1.0f);
+        float dot = std::clamp(Quaternion::dot(a.normalized(), b.normalized()), -1.0f, 1.0f);
         return std::acos(dot) * 2.0f;
     }
 
@@ -208,21 +208,21 @@ namespace math
 
     bool Quaternion::operator!=(const Quaternion& o) const { return !(*this == o); }
 
-    Vector3<float> Quaternion::RotateVector(const Vector3<float>& v) const
+    Vector3<float> Quaternion::rotate_vector(const Vector3<float>& v) const
     {
         Quaternion qv(0.0f, v.x, v.y, v.z);
-        Quaternion res = (*this) * qv * Conjugate();
+        Quaternion res = (*this) * qv * conjugate();
         return { res.x, res.y, res.z };
     }
 
-    Quaternion Quaternion::Slerp(const Quaternion& a, const Quaternion& b, float t)
+    Quaternion Quaternion::slerp(const Quaternion& a, const Quaternion& b, float t)
     {
-        return SlerpUnclamped(a, b, std::clamp(t, 0.0f, 1.0f));
+        return slerp_unclamped(a, b, std::clamp(t, 0.0f, 1.0f));
     }
 
-    Quaternion Quaternion::SlerpUnclamped(const Quaternion& a, const Quaternion& b, float t)
+    Quaternion Quaternion::slerp_unclamped(const Quaternion& a, const Quaternion& b, float t)
     {
-        float dot = Dot(a, b);
+        float dot = Quaternion::dot(a, b);
         Quaternion bCopy = b;
         if (dot < 0.0f)
         {
@@ -239,7 +239,7 @@ namespace math
                 a.y + t * (bCopy.y - a.y),
                 a.z + t * (bCopy.z - a.z)
             );
-            r.Normalize();
+            r.normalize();
             return r;
         }
 
@@ -256,16 +256,16 @@ namespace math
             (a.y * s0) + (bCopy.y * s1),
             (a.z * s0) + (bCopy.z * s1)
         );
-        r.Normalize();
+        r.normalize();
         return r;
     }
 
-    Quaternion Quaternion::Lerp(const Quaternion& a, const Quaternion& b, float t)
+    Quaternion Quaternion::lerp(const Quaternion& a, const Quaternion& b, float t)
     {
-        return LerpUnclamped(a, b, std::clamp(t, 0.0f, 1.0f));
+        return lerp_unclamped(a, b, std::clamp(t, 0.0f, 1.0f));
     }
 
-    Quaternion Quaternion::LerpUnclamped(const Quaternion& a, const Quaternion& b, float t)
+    Quaternion Quaternion::lerp_unclamped(const Quaternion& a, const Quaternion& b, float t)
     {
         Quaternion q(
             a.w + t * (b.w - a.w),
@@ -274,24 +274,24 @@ namespace math
             a.z + t * (b.z - a.z)
         );
 
-        q.Normalize();
+        q.normalize();
 
         return q;
     }
 
-    Quaternion Quaternion::RotateTowards(const Quaternion& from, const Quaternion& to, float maxRadiansDelta)
+    Quaternion Quaternion::rotate_towards(const Quaternion& from, const Quaternion& to, float maxRadiansDelta)
     {
-        float angle = Angle(from, to);
+        float angle = Quaternion::angle(from, to);
         if (angle == 0.0f) return to;
 
         float t = std::min(1.0f, maxRadiansDelta / angle);
 
-        return SlerpUnclamped(from, to, t);
+        return slerp_unclamped(from, to, t);
     }
 
-    void Quaternion::ToAxisAngle(Vector3<float>& axis, float& angleRadians) const
+    void Quaternion::to_axis_angle(Vector3<float>& axis, float& angleRadians) const
     {
-        Quaternion q = Normalized();
+        Quaternion q = normalized();
         angleRadians = 2.0f * std::acos(q.w);
 
         float s = std::sqrt(1.0f - q.w * q.w);
@@ -301,7 +301,7 @@ namespace math
             axis = { q.x / s, q.y / s, q.z / s };
     }
 
-    Vector3<float> Quaternion::ToEuler() const
+    Vector3<float> Quaternion::to_euler() const
     {
         Vector3<float> euler;
 

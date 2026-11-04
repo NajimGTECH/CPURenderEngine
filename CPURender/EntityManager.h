@@ -16,11 +16,11 @@ const int MAX_COMPONENTS = 64;
 // See ARCHITECTURE.md at the root of the repository for how it fits with the rest of the engine.
 //
 //	EntityManager em;
-//	const int transformID = em.RegisterComponent<TransformComponent>();  // once per type, at startup
-//	const int cow = em.CreateEntity();
+//	const int transformID = em.register_component<TransformComponent>();  // once per type, at startup
+//	const int cow = em.create_entity();
 //	TransformComponent transform;
-//	em.AddComponent(cow, transformID, &transform);
-//	for (int entity : em.FetchAllEntities(transformID)) { /* ... */ }
+//	em.add_component(cow, transformID, &transform);
+//	for (int entity : em.fetch_all_entities(transformID)) { /* ... */ }
 class EntityManager
 {
 public:
@@ -38,7 +38,7 @@ public:
 
 	// Creates the storage of a component type and returns its componentID.
 	template<typename T>
-	int RegisterComponent()
+	int register_component()
 	{
 		assert(static_cast<int>(componentStorages.size()) < MAX_COMPONENTS && "Too many component types, raise MAX_COMPONENTS");
 
@@ -47,7 +47,7 @@ public:
 	}
 
 	// Reuses the id of a destroyed entity if there is one.
-	int CreateEntity()
+	int create_entity()
 	{
 		if (!freeEntityIDs.empty())
 		{
@@ -61,53 +61,53 @@ public:
 	}
 
 	// Removes every component of the entity, and frees its id.
-	void DestroyEntity(int entity)
+	void destroy_entity(int entity)
 	{
 		assert(entity >= 0 && entity < nextEntityID);
 		assert(std::find(freeEntityIDs.begin(), freeEntityIDs.end(), entity) == freeEntityIDs.end() && "Entity already destroyed");
 
 		for (int componentID = 0; componentID < static_cast<int>(componentStorages.size()); componentID++)
 		{
-			if (entityComponents[entity].test(componentID)) RemoveComponent(entity, componentID);
+			if (entityComponents[entity].test(componentID)) remove_component(entity, componentID);
 		}
 
 		freeEntityIDs.push_back(entity);
 	}
 
 	// The value is copied into the storage.
-	void AddComponent(int entity, int componentID, void* value)
+	void add_component(int entity, int componentID, void* value)
 	{
 		assert(entity >= 0 && entity < nextEntityID);
 		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
 
-		componentStorages[componentID]->Add(entity, value);
+		componentStorages[componentID]->add(entity, value);
 		entityComponents[entity].set(componentID);
 	}
 
-	void RemoveComponent(int entity, int componentID)
+	void remove_component(int entity, int componentID)
 	{
 		assert(entity >= 0 && entity < nextEntityID);
 		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
 
-		componentStorages[componentID]->Remove(entity);
+		componentStorages[componentID]->remove(entity);
 		entityComponents[entity].reset(componentID);
 	}
 
 	// The systems read and write the components through this: cast the result to the component type.
-	void* GetComponent(int entity, int componentID)
+	void* get_component(int entity, int componentID)
 	{
 		assert(entity >= 0 && entity < nextEntityID);
 		assert(componentID >= 0 && componentID < static_cast<int>(componentStorages.size()));
 
-		return componentStorages[componentID]->Get(entity);
+		return componentStorages[componentID]->get(entity);
 	}
 
 	// Every living entity that has ALL the given components, in increasing entity id.
 	// A destroyed entity has an empty bitset, so it can't match: that's why the mask must not be empty.
 	template<typename... IDs>
-	std::vector<int> FetchAllEntities(IDs... componentIDs) const
+	std::vector<int> fetch_all_entities(IDs... componentIDs) const
 	{
-		static_assert(sizeof...(componentIDs) > 0, "FetchAllEntities needs at least one componentID");
+		static_assert(sizeof...(componentIDs) > 0, "fetch_all_entities needs at least one componentID");
 
 		std::bitset<MAX_COMPONENTS> mask;
 		(mask.set(static_cast<std::size_t>(componentIDs)), ...);
