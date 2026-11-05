@@ -1,6 +1,10 @@
 # Architecture
 
-A software renderer: the CPU computes every pixel, and SDL3 is only used to open a window and show the result. The scene is organised as an **ECS** (Entity Component System).
+A software renderer: the CPU computes every pixel, and SDL3 is only used to open a window and show the result. The scene is organised as an **ECS** (Entity Component System), and the screen is drawn in tiles, one per CPU thread.
+
+**Authors:** Najim BAKKALI and Tristan GERMAIN. For what the project does and how to run it, see the **[README](README.md)**. This file explains how the code is organised.
+
+**Contents:** [The big picture](#the-big-picture) · [The ECS](#the-ecs-in-three-ideas) · [The entities](#the-entities) · [The systems](#the-systems) · [One frame](#one-frame) · [Multithreading](#multithreading) · [The terrain](#the-terrain) · [The UI](#the-ui) · [The chapters](#the-chapters) · [Where to find things](#where-to-find-things) · [Recipes](#recipes) · [Conventions](#conventions) · [Good to know](#good-to-know)
 
 ## The big picture
 
@@ -147,7 +151,51 @@ vertices -> clip space -> near plane clipping -> divide by w + viewport -> backf
          -> for each pixel of the triangle inside the tile: depth test -> shader::shade -> framebuffer
 ```
 
+## Multithreading
+
+The screen is cut into a grid of tiles, one per hardware thread, and every thread draws the whole scene but only writes the pixels of its own tile.
+
+```
+tiles::make_grid           once, on the first frame
+     |                     one tile per hardware thread, as square as possible: 8 threads -> 4 x 2 tiles
+     |
+systems::render            every frame
+     |- main thread        read the entities into a RenderList (camera, lights, meshes + their screen box, particles)
+     |- tiles::run_in_parallel
+     |     one std::thread per tile, each one runs draw_tile with its own tile
+     |        the 3 passes, skipping the meshes whose screen box doesn't touch the tile
+     |        rasterizer::draw_mesh / draw_particles only write the pixels inside the tile
+     '- join every thread  the frame is done when the slowest tile is
+```
+
+| Part | Role | Where |
+|---|---|---|
+| `tiles::make_grid` | Cuts the screen into the tiles. `rows` is the largest divisor of the thread count not bigger than its square root, so every thread gets exactly one tile | `Tiles.cpp` |
+| `tiles::run_in_parallel` | Starts one thread per tile, then joins them all. With a single tile, it just calls the function on the main thread | `Tiles.cpp` |
+| `RenderList` | Everything a tile needs, read from the entities before the threads start, then only read | `RenderSystem.cpp` |
+| `draw_tile` | The three passes, limited to one tile | `RenderSystem.cpp` |
+| `rasterizer::screen_box` | The rectangle of the screen a mesh can cover, so a tile can skip it | `Rasterizer.cpp` |
+| `region` parameter | The rectangle of pixels `draw_mesh` and `draw_particles` must stay inside | `Rasterizer.h` |
+
+Why it is safe:
+- **The threads share nothing they write.** No two tiles share a pixel or a depth value, so there is no lock. Everything else (meshes, materials, textures, lights, particles) is only read while the threads run.
+- **The threads never touch the ECS**: the entities are read on the main thread first. The rasterizer only gets a rectangle of pixels to stay inside, it doesn't know about threads either.
+- **The image is exactly the same with and without threads**, checked byte for byte, opaque and transparent: inside a tile everything is drawn in the same order, and the edge functions give a pixel the same value whatever box the loop starts from.
+
 With `MULTITHREADING` set to `false` (`Tiles.h`), there is a single tile covering the whole screen, drawn on the main thread: exactly the frame from before the tiles.
+
+Measured in Release on a Ryzen 7 9800X3D (8 cores), average of 500 frames:
+
+| | One thread | 8 threads |
+|---|---|---|
+| Opaque, whole frame | 19.4 ms | 6.7 ms |
+| Opaque, `systems::render` only | 18.3 ms | 5.5 ms |
+| Transparent (`T`), whole frame | 30.8 ms | 10.5 ms |
+| Transparent (`T`), `systems::render` only | 29.4 ms | 9.3 ms |
+
+- **Why about 3 times faster and not 8**: the frame has to wait for the slowest tile. The 4 bottom tiles are covered by the terrain and take 4.2 to 4.9 ms each, the 4 top ones (sky and cows) only 1.0 to 1.6 ms. And every tile that touches a mesh transforms all its vertices and sets up all its triangles again, so the 8 tiles add up to about 23 ms of work instead of 18. Smaller tiles handed out to the threads as they finish would balance better, but are more complex.
+- **`screen_box` plays it safe**: when a vertex is behind the near plane, it gives up and returns the whole screen, so the mesh is never wrongly skipped.
+- **The threads are started every frame** and joined at the end of `render`. Keeping them alive between frames (a thread pool) would save that, but it is small: everything `render` does outside the tiles, starting the threads included, takes about 0.6 ms.
 
 ## The terrain
 
@@ -179,6 +227,24 @@ An element belongs to a canvas through `canvasEntity`, the id of the canvas enti
 Because of the two steps, a text is always on top of every image, whatever the order of the entities. Inside each step, canvases are drawn in increasing entity id, and so are their elements.
 
 `main.cpp` calls `SDL_SetRenderLogicalPresentation`, which makes SDL's coordinates framebuffer pixels at any window size. Without it the text would drift away from the images, which are stretched with the framebuffer, as soon as the window is resized.
+
+## The chapters
+
+The 12 chapters of the course are in `Chapters/`, kept as they were written. They take their mesh directly and don't go through the ECS. What the live renderer still needs from them (the edge function, the clipping) moved to `Rasterizer.h`.
+
+| File | Chapters | What it draws |
+|---|---|---|
+| `Chapter01.cpp` | 1 | A colour gradient written pixel by pixel |
+| `Chapter03.cpp` | 3 | A triangle filled with the edge function, its corner colours blended |
+| `Chapter04.cpp` | 4 | A triangle rotating inside a circle, with the first, now deprecated, math classes |
+| `Chapter06.cpp` | 2, 5, 6 | Spot in wireframe: Bresenham lines, the projection pipeline, the OBJ mesh |
+| `Chapter08.cpp` | 7, 8 | Depth buffer and backface culling, each one behind a switch |
+| `Chapter09.cpp` | 9 | Texture with perspective-correct UVs (`CHAPTER_9_PERSPECTIVE_CORRECT`) |
+| `Chapter10.cpp` | 10 | Lambert lighting, one normal per face |
+| `Chapter11.cpp` | 11 | Phong shading per pixel and Blinn-Phong highlights |
+| `Chapter12.cpp` | 12 | Near-plane clipping and bilinear filtering (`CHAPTER_12_BILINEAR`) |
+
+Each one builds on the previous one: the shared vertex types and switches are in `Chapters.h`. To run one, see [Run an old chapter](#run-an-old-chapter).
 
 ## Where to find things
 
@@ -286,21 +352,23 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 
 ## Good to know
 
+### ECS
+
 - **Fixed capacity**: `MAX_ENTITIES` is 100. Every storage reserves a slot per entity, so raising it costs memory for every component type. `MAX_COMPONENTS` is 64, the size of the bitsets.
 - **Removing a component doesn't clear its slot**: `remove` only marks the slot as free, so what the component holds (like a particle pool) stays allocated until the slot is reused.
 - **One camera**: `render` looks through the first entity with a Transform and a Camera. Others are ignored.
 - **`Light::position` and `ParticleEmitter::position` are overwritten**: the systems copy them from the entity's Transform, which is the one source of truth. Set the Transform instead.
 - **Components are copied when added**, and copying a vector loses its reserved memory. That's why `add_particles` in `Scene.cpp` reserves the particle pool after adding the component.
+
+### Rendering
+
 - **The framebuffer is a global** on purpose: it holds pixels rather than scene data, and the chapters draw into it too.
 - **Transparency is approximate**: meshes and faces are sorted from back to front (painter's algorithm), which can fail on faces that intersect.
+- **Known bug, chapter 8 draws nothing**: `clear_zbuffer()` in `Chapter08.cpp` is never called, so every pixel fails the depth test. The live scene isn't affected.
+
+### Performance
+
 - **Generating the terrain doesn't cost any FPS**: it takes about 145 ms, once, before the loop. After that it costs what any mesh costs to draw.
 - **The terrain is the slowest thing in the frame**: it covers about half of the screen, and the cost is per pixel, so its size on screen matters much more than its number of triangles. Measured in Release, on one thread, without the particles and the UI: 15 ms for the terrain and 11 ms for the cows. Going from 96 to 64 vertices per side only saves about 1 ms.
 - **The per-pixel code is written for speed**: `draw_triangle` updates its edge functions with additions instead of computing them for each pixel, and `texture::sample_bilinear` avoids `std::floor` and `std::round`, which alone took a frame from 49 ms to 28 ms.
-- **Multithreading: the threads share nothing they write.** The screen is cut into one tile per hardware thread (4 x 2 tiles with 8 threads), and every thread draws the whole scene but only writes the pixels of its own tile. No two threads ever write the same pixel or depth value, so there is no lock. Everything else (meshes, materials, textures, lights, particles) is only read while the threads run.
-- **The threads never touch the ECS**: `render` reads the entities on the main thread first, into a `RenderList` of plain data, and only then starts the threads. The rasterizer only gets a rectangle of pixels (`region`) to stay inside, it doesn't know about threads either.
-- **The image is exactly the same with and without threads**, checked byte for byte, opaque and transparent: inside a tile everything is drawn in the same order, and the edge functions give a pixel the same value whatever box the loop starts from.
-- **Measured** in Release on a Ryzen 7 9800X3D (8 cores), average of 500 frames: with `MULTITHREADING` the frame goes from 19.4 ms to 6.7 ms (render alone: 18.3 ms to 5.5 ms), and in transparent mode from 30.8 ms to 10.5 ms (render: 29.4 ms to 9.3 ms). So about 3 times faster, not 8.
-- **Why not 8 times faster**: the frame has to wait for the slowest tile. The 4 bottom tiles are covered by the terrain and take 4.2 to 4.9 ms each, the 4 top ones (sky and cows) only 1.0 to 1.6 ms. And every tile that touches a mesh transforms all its vertices and sets up all its triangles again, so the 8 tiles add up to about 23 ms of work instead of 18. Smaller tiles handed out to the threads as they finish would balance better, but are more complex.
-- **A mesh is skipped by the tiles it doesn't touch**: `rasterizer::screen_box` projects its vertices to find the rectangle it covers. When a vertex is behind the near plane, it gives up and returns the whole screen, which is always safe.
-- **The threads are started every frame** and joined at the end of `render`. Keeping them alive between frames (a thread pool) would save that, but it is small: everything `render` does outside the tiles, starting the threads included, takes about 0.6 ms.
-- **Known bug, chapter 8 draws nothing**: `clear_zbuffer()` in `Chapter08.cpp` is never called, so every pixel fails the depth test. The live scene isn't affected.
+- **Multithreading makes the frame about 3 times faster** on 8 cores: see [Multithreading](#multithreading) for the measures and why it isn't 8.
