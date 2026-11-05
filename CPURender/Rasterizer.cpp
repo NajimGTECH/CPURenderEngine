@@ -39,6 +39,22 @@ BoundingBox rasterizer::bounding_box(const Pixel& a, const Pixel& b, const Pixel
     };
 }
 
+// The largest min and the smallest max: if the rectangles don't overlap, min ends up past max.
+BoundingBox rasterizer::intersect(const BoundingBox& a, const BoundingBox& b)
+{
+    return BoundingBox{
+        std::max(a.minX, b.minX),
+        std::max(a.minY, b.minY),
+        std::min(a.maxX, b.maxX),
+        std::min(a.maxY, b.maxY)
+    };
+}
+
+bool rasterizer::is_empty(const BoundingBox& box)
+{
+    return box.minX > box.maxX || box.minY > box.maxY;
+}
+
 // p * M with p = (x, y, z, 1), keeping w: multiply_point would already divide by w,
 // which is exactly what we must avoid until the triangle is clipped.
 ClipVertex rasterizer::to_clip_space(const math::Mat4<float>& matrix, const math::Vector3<float>& p)
@@ -144,8 +160,10 @@ static EdgeWalker make_edge_walker(const Pixel& a, const Pixel& b, const Boundin
 // Same fill as chapter 11, but the rasterizer no longer knows anything about lighting:
 // it builds one Fragment per pixel and the shader decides its colour.
 // opacity < 1 blends the pixel over the framebuffer instead of replacing it.
+// Only the pixels inside region are drawn.
 static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    const BoundingBox& region)
 {
     float area = rasterizer::edge(Pixel{ vA.x, vA.y }, Pixel{ vB.x, vB.y }, Pixel{ vC.x, vC.y });
     if (area == 0.f) return;
@@ -160,7 +178,11 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const Pixel pB{ vB.x, vB.y };
     const Pixel pC{ vC.x, vC.y };
 
-    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC);
+    // Only the part of the triangle's box inside the region: on a tile, the other pixels belong to another thread.
+    // The edge walkers below start from the corner of this smaller box, so the pixels that are drawn
+    // get exactly the same values as if the whole triangle was drawn.
+    const BoundingBox box = rasterizer::intersect(rasterizer::bounding_box(pA, pB, pC), region);
+    if (rasterizer::is_empty(box)) return; // the triangle is entirely outside the region
 
     const bool transparent = opacity < 1.0f;
 
@@ -249,7 +271,7 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
                 depthBuffer[index] = z;
             }
 
-            // Directly into the framebuffer: the box is clamped to the screen, so the pixel can't be outside.
+            // Directly into the framebuffer: the box is inside the region, so the pixel can't be outside the screen.
             frameBuffer[index] = color.to_rgb();
         }
     }
@@ -258,7 +280,8 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
 // An already clipped triangle (against the near plane, chapter 12):
 // divide by w, viewport, backface culling, then the shader rasterizer.
 static void project_and_draw(std::span<const ClipVertex> triangle, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    const BoundingBox& region)
 {
     std::array<ShaderVertex, 3> projected;
     for (int k = 0; k < 3; k++)
@@ -277,7 +300,7 @@ static void project_and_draw(std::span<const ClipVertex> triangle, const Materia
     if (rasterizer::edge(Pixel{ projected[0].x, projected[0].y }, Pixel{ projected[1].x, projected[1].y },
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
-    draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
+    draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity, region);
 }
 
 // True if the 3 corners are all past the same side of the screen: the triangle can't touch a single pixel.
@@ -291,13 +314,45 @@ static bool is_off_screen(const ClipVertex& a, const ClipVertex& b, const ClipVe
         || (a.y < -a.w && b.y < -b.w && c.y < -c.w);
 }
 
+// Projects every vertex like project_and_draw does, and keeps the smallest and largest x and y.
+// The render system uses it to skip the tiles a mesh doesn't touch.
+// A vertex behind the near plane would be clipped, and the clipped triangle can reach any edge of the screen:
+// in that case we don't try to be clever and return the whole screen, which is always safe.
+BoundingBox rasterizer::screen_box(const Mesh& mesh, const math::Mat4<float>& model, const math::Mat4<float>& viewProjection)
+{
+    const math::Mat4<float> modelViewProjection = model * viewProjection;
+    const BoundingBox screen{ 0, 0, WIDTH - 1, HEIGHT - 1 };
+
+    // Starts inside out (min past max), so the first vertex sets all four sides.
+    BoundingBox box{ WIDTH, HEIGHT, -1, -1 };
+    for (const math::Vector3<float>& vertex : mesh.vertices)
+    {
+        const ClipVertex clip = to_clip_space(modelViewProjection, vertex);
+        if (near_distance(clip) < 0.0f) return screen;
+
+        const float invW = 1.0f / clip.w;
+        const int x = static_cast<int>((clip.x * invW + 1.0f) * 0.5f * WIDTH);
+        const int y = static_cast<int>((1.0f - clip.y * invW) * 0.5f * HEIGHT);
+        box.minX = std::min(box.minX, x);
+        box.minY = std::min(box.minY, y);
+        box.maxX = std::max(box.maxX, x);
+        box.maxY = std::max(box.maxY, y);
+    }
+
+    // Clamped to the screen: a mesh entirely off screen ends up empty
+    return intersect(box, screen);
+}
+
 // Draws a mesh placed in the world by its model matrix, with a material.
 // Same pipeline as chapter 12 (clip space -> near clipping -> raster),
 // the vertices also keep their world position for the shader.
 // opacity < 1 draws the mesh in the transparent pass: call it AFTER every opaque mesh.
+// Only the pixels inside region are drawn, but the whole mesh is still transformed:
+// each tile that touches the mesh repeats that work, which is simpler than sharing it between the threads.
 void rasterizer::draw_mesh(const Mesh& mesh,
     const math::Mat4<float>& model, const math::Mat4<float>& viewProjection, const Material& material,
-    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity)
+    const std::vector<Light>& lights, const math::Vector3<float>& cameraPosition, float opacity,
+    const BoundingBox& region)
 {
     // Row vectors (p * M): model, then view, then projection.
     const math::Mat4<float> modelViewProjection = model * viewProjection;
@@ -344,7 +399,7 @@ void rasterizer::draw_mesh(const Mesh& mesh,
         const int triangleCount = clip_triangle_near(vA, vB, vC, clipped);
         for (int t = 0; t < triangleCount; t++)
         {
-            project_and_draw(std::span(clipped).subspan(t * 3, 3), material, lights, cameraPosition, opacity);
+            project_and_draw(std::span(clipped).subspan(t * 3, 3), material, lights, cameraPosition, opacity, region);
         }
     }
 }
@@ -375,7 +430,8 @@ static Color3 blend_add(const math::Vector3<float>& color, int index, float amou
 
 // Draws every particle of a system as one pixel.
 // Same projection as a mesh vertex (chapter 12), then the depth test, so the cows hide the particles behind them.
-void rasterizer::draw_particles(const ParticleSystem& system, const math::Mat4<float>& viewProjection)
+// Every tile projects all the particles and keeps the ones that land inside it.
+void rasterizer::draw_particles(const ParticleSystem& system, const math::Mat4<float>& viewProjection, const BoundingBox& region)
 {
     for (const Particle& particle : system.particles)
     {
@@ -390,10 +446,11 @@ void rasterizer::draw_particles(const ParticleSystem& system, const math::Mat4<f
         if (ndcX < -1.0f || ndcX > 1.0f || ndcY < -1.0f || ndcY > 1.0f) continue; // outside the window
         if (z < -1.0f || z > 1.0f) continue;                                        // before near or after far
 
-        // ndc = 1 lands exactly on WIDTH or HEIGHT, one pixel past the last one: check the pixel too
+        // Outside the region: another tile draws it. The region is inside the screen, so this also drops
+        // ndc = 1, which lands exactly on WIDTH or HEIGHT, one pixel past the last one.
         const int x = static_cast<int>((ndcX + 1.0f) * 0.5f * WIDTH);
         const int y = static_cast<int>((1.0f - ndcY) * 0.5f * HEIGHT);
-        if (x >= WIDTH || y >= HEIGHT) continue;
+        if (x < region.minX || x > region.maxX || y < region.minY || y > region.maxY) continue;
         const int index = y * WIDTH + x;
         if (z >= depthBuffer[index]) continue;
 

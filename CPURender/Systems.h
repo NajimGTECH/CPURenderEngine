@@ -27,6 +27,7 @@ namespace systems
 
     // Drawing (RenderSystem.cpp): draws every entity into the framebuffer, seen from the first camera.
     // Writes the frame and depth buffers only, nothing reaches the screen yet.
+    // The screen is cut into tiles drawn on one thread each (Tiles.h); it returns when every tile is done.
     void render(EntityManager& em, const ComponentIDs& ids);
 
     // UI (UISystem.cpp), in two steps because the elements don't reach the screen the same way:

@@ -17,7 +17,9 @@ A software renderer: the CPU computes every pixel, and SDL3 is only used to open
     |      |
     |      |-- UI                              canvases, images and text -> pixels and SDL text
     |      |
-    |      '-- Rasterizer                      triangles and particles -> pixels
+    |      |-- Tiles                           cuts the screen into tiles, draws them on one thread each
+    |      |
+    |      '-- Rasterizer                      triangles and particles -> the pixels of one tile
     |             |
     |             |-- Shader, Light, Material, Texture     the colour of one pixel
     |             '-- Framebuffer                          where the pixels go
@@ -104,7 +106,7 @@ Meshes and materials are **shared**: `MeshComponent` and `MaterialComponent` onl
 | `orbit_system` | `Systems.cpp` | Transform, Orbit | Moves the entity on its circle |
 | `light_sweep_system` | `Systems.cpp` | Transform, Light, LightSweep | Aims the light |
 | `particle_system` | `Systems.cpp` | Transform, Particle | Spawns, ages and moves the particles |
-| `render` | `RenderSystem.cpp` | Transform + Camera, Light, Mesh + Material, Particle | Draws into the framebuffer |
+| `render` | `RenderSystem.cpp` | Transform + Camera, Light, Mesh + Material, Particle | Draws into the framebuffer, one tile per thread |
 | `draw_ui_images` | `UISystem.cpp` | Canvas, Image | Draws the images into the framebuffer |
 | `draw_ui_text` | `UISystem.cpp` | Canvas, Text | Draws the texts through SDL |
 | `draw_hud`, `update_window_title` | `HudSystem.cpp` | Name, Light, LightToggle, Particle, Camera | Shows the state of the scene |
@@ -123,11 +125,14 @@ main loop
        |- spin -> orbit -> light sweep -> particles
        |- clear the framebuffer
        |- systems::render
-       |     find the camera, gather the lights and the meshes, sort them
-       |     clear the depth buffer
-       |     1. opaque meshes       fill the depth buffer
-       |     2. particles           hidden by the opaque meshes
-       |     3. transparent meshes  back to front, test the depth but don't write it
+       |     main thread: read the entities into a RenderList of plain data
+       |        find the camera, gather the lights, the meshes (+ their box on screen) and the particles
+       |        sort the meshes, clear the depth buffer
+       |     one thread per tile, all at the same time, each one only writes the pixels of its tile:
+       |        1. opaque meshes       fill the depth buffer         skip the meshes that don't touch the tile
+       |        2. particles           hidden by the opaque meshes   keep the ones that land in the tile
+       |        3. transparent meshes  back to front, test the depth but don't write it
+       |     main thread: wait for every tile
        |- systems::draw_ui_images    UI images, into the framebuffer
        |- upload the framebuffer to an SDL texture
        |- systems::draw_ui_text      UI text on top, through SDL
@@ -135,12 +140,14 @@ main loop
        '- present
 ```
 
-Inside `rasterizer::draw_mesh`, for one mesh:
+Inside `rasterizer::draw_mesh`, for one mesh and one tile:
 
 ```
 vertices -> clip space -> near plane clipping -> divide by w + viewport -> backface culling
-         -> for each pixel of the triangle: depth test -> shader::shade -> framebuffer
+         -> for each pixel of the triangle inside the tile: depth test -> shader::shade -> framebuffer
 ```
+
+With `MULTITHREADING` set to `false` (`Tiles.h`), there is a single tile covering the whole screen, drawn on the main thread: exactly the frame from before the tiles.
 
 ## The terrain
 
@@ -184,6 +191,7 @@ Because of the two steps, a text is always on top of every image, whatever the o
 | `Systems.h` | The declaration of the systems |
 | `Systems.cpp`, `RenderSystem.cpp`, `HudSystem.cpp`, `UISystem.cpp` | The systems |
 | `Rasterizer.h/.cpp` | Clipping, triangle fill, depth test, transparency, particle drawing |
+| `Tiles.h/.cpp` | The grid of tiles, the threads that draw them, and the `MULTITHREADING` switch |
 | `Shader.h/.cpp` | The colour of one pixel (unlit, Lambert, Blinn-Phong) |
 | `Light`, `Material`, `Mesh`, `Texture`, `Particle` | The data and the logic of each concept, independent of the ECS |
 | `Editor.h/.cpp` | Terrain generation: the mesh and the texture |
@@ -286,6 +294,13 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 - **The framebuffer is a global** on purpose: it holds pixels rather than scene data, and the chapters draw into it too.
 - **Transparency is approximate**: meshes and faces are sorted from back to front (painter's algorithm), which can fail on faces that intersect.
 - **Generating the terrain doesn't cost any FPS**: it takes about 145 ms, once, before the loop. After that it costs what any mesh costs to draw.
-- **The terrain is the slowest thing in the frame**: it covers about half of the screen, and the cost is per pixel, so its size on screen matters much more than its number of triangles. Measured in Release, without the particles and the UI: 15 ms for the terrain and 11 ms for the cows. Going from 96 to 64 vertices per side only saves about 1 ms.
+- **The terrain is the slowest thing in the frame**: it covers about half of the screen, and the cost is per pixel, so its size on screen matters much more than its number of triangles. Measured in Release, on one thread, without the particles and the UI: 15 ms for the terrain and 11 ms for the cows. Going from 96 to 64 vertices per side only saves about 1 ms.
 - **The per-pixel code is written for speed**: `draw_triangle` updates its edge functions with additions instead of computing them for each pixel, and `texture::sample_bilinear` avoids `std::floor` and `std::round`, which alone took a frame from 49 ms to 28 ms.
+- **Multithreading: the threads share nothing they write.** The screen is cut into one tile per hardware thread (4 x 2 tiles with 8 threads), and every thread draws the whole scene but only writes the pixels of its own tile. No two threads ever write the same pixel or depth value, so there is no lock. Everything else (meshes, materials, textures, lights, particles) is only read while the threads run.
+- **The threads never touch the ECS**: `render` reads the entities on the main thread first, into a `RenderList` of plain data, and only then starts the threads. The rasterizer only gets a rectangle of pixels (`region`) to stay inside, it doesn't know about threads either.
+- **The image is exactly the same with and without threads**, checked byte for byte, opaque and transparent: inside a tile everything is drawn in the same order, and the edge functions give a pixel the same value whatever box the loop starts from.
+- **Measured** in Release on a Ryzen 7 9800X3D (8 cores), average of 500 frames: with `MULTITHREADING` the frame goes from 19.4 ms to 6.7 ms (render alone: 18.3 ms to 5.5 ms), and in transparent mode from 30.8 ms to 10.5 ms (render: 29.4 ms to 9.3 ms). So about 3 times faster, not 8.
+- **Why not 8 times faster**: the frame has to wait for the slowest tile. The 4 bottom tiles are covered by the terrain and take 4.2 to 4.9 ms each, the 4 top ones (sky and cows) only 1.0 to 1.6 ms. And every tile that touches a mesh transforms all its vertices and sets up all its triangles again, so the 8 tiles add up to about 23 ms of work instead of 18. Smaller tiles handed out to the threads as they finish would balance better, but are more complex.
+- **A mesh is skipped by the tiles it doesn't touch**: `rasterizer::screen_box` projects its vertices to find the rectangle it covers. When a vertex is behind the near plane, it gives up and returns the whole screen, which is always safe.
+- **The threads are started every frame** and joined at the end of `render`. Keeping them alive between frames (a thread pool) would save that, but it is small: everything `render` does outside the tiles, starting the threads included, takes about 0.6 ms.
 - **Known bug, chapter 8 draws nothing**: `clear_zbuffer()` in `Chapter08.cpp` is never called, so every pixel fails the depth test. The live scene isn't affected.
