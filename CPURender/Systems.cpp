@@ -41,13 +41,15 @@ void systems::handle_key(EntityManager& em, const ComponentIDs& ids, SDL_Keycode
 // ---- Simulation ----
 
 // Spin: the rotation only depends on the time since the start.
+// The matrix holds everything, so it is rebuilt with the new rotation, keeping the position and the scale.
 void systems::spin_system(EntityManager& em, const ComponentIDs& ids, float seconds)
 {
     for (int entity : em.fetch_all_entities(ids.transform, ids.spin))
     {
         TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
         const SpinComponent& spin = *static_cast<SpinComponent*>(em.get_component(entity, ids.spin));
-        transform.rotation = math::Quaternion::from_axis_angle(spin.axis, seconds * spin.speed);
+        const math::Quaternion rotation = math::Quaternion::from_axis_angle(spin.axis, seconds * spin.speed);
+        transform.transformMatrix = math::Mat4<float>::trs(transform.transformMatrix.extract_position(), rotation, transform.transformMatrix.extract_scale());
     }
 }
 
@@ -60,10 +62,10 @@ void systems::orbit_system(EntityManager& em, const ComponentIDs& ids, float sec
         const OrbitComponent& orbit = *static_cast<OrbitComponent*>(em.get_component(entity, ids.orbit));
 
         const float angle = seconds * orbit.speed;
-        transform.position = math::Vector3<float>(
+        transform.transformMatrix.set_position(math::Vector3<float>(
             orbit.center.x + orbit.radius * std::cos(angle),
             orbit.center.y,
-            orbit.center.z + orbit.radius * std::sin(angle));
+            orbit.center.z + orbit.radius * std::sin(angle)));
     }
 }
 
@@ -80,7 +82,7 @@ void systems::light_sweep_system(EntityManager& em, const ComponentIDs& ids, flo
             sweep.center.x + sweep.amplitude * std::sin(seconds * sweep.speed),
             sweep.center.y,
             sweep.center.z);
-        light.light.direction = (target - transform.position).normalized();
+        light.light.direction = (target - transform.transformMatrix.extract_position()).normalized();
     }
 }
 
@@ -93,7 +95,7 @@ void systems::particle_system(EntityManager& em, const ComponentIDs& ids, float 
         ParticleComponent& particles = *static_cast<ParticleComponent*>(em.get_component(entity, ids.particle));
 
         // The emitter sits on its entity, wherever it is
-        particles.emitter.position = transform.position;
+        particles.emitter.position = transform.transformMatrix.extract_position();
 
         if (particles.emitting) particle::emit(particles.emitter, particles.system, deltaTime);
         particle::update(particles.system, deltaTime);

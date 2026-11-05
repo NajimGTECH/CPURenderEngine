@@ -58,7 +58,7 @@ static void create_camera(EntityManager& em, const ComponentIDs& ids)
     em.add_component(entity, ids.name, &name);
 
     TransformComponent transform;
-    transform.position = math::Vector3<float>(0.0f, 0.0f, 4.2f);
+    transform.transformMatrix.set_position(math::Vector3<float>(0.0f, 0.0f, 4.2f));
     em.add_component(entity, ids.transform, &transform);
 
     CameraComponent camera;
@@ -149,7 +149,7 @@ static void create_spot(EntityManager& em, const ComponentIDs& ids)
     em.add_component(entity, ids.lightToggle, &toggle);
 
     TransformComponent transform;
-    transform.position = math::Vector3<float>(0.0f, 2.5f, 4.0f);
+    transform.transformMatrix.set_position(math::Vector3<float>(0.0f, 2.5f, 4.0f));
     em.add_component(entity, ids.transform, &transform);
 
     LightSweepComponent sweep;
@@ -184,8 +184,7 @@ static void create_cows(EntityManager& em, const ComponentIDs& ids, const Assets
         em.add_component(entity, ids.name, &name);
 
         TransformComponent transform;
-        transform.position = slots[i];
-        transform.scale = math::Vector3<float>(0.7f, 0.7f, 0.7f);
+        transform.transformMatrix = math::Mat4<float>::trs(slots[i], math::Quaternion(), math::Vector3<float>(0.7f, 0.7f, 0.7f));
         em.add_component(entity, ids.transform, &transform);
 
         MeshComponent mesh;
@@ -212,7 +211,7 @@ static void create_fountain(EntityManager& em, const ComponentIDs& ids)
     em.add_component(entity, ids.name, &name);
 
     TransformComponent transform;
-    transform.position = math::Vector3<float>(0.0f, -1.8f, 0.0f);
+    transform.transformMatrix.set_position(math::Vector3<float>(0.0f, -1.8f, 0.0f));
     em.add_component(entity, ids.transform, &transform);
 
     ParticleComponent particles;

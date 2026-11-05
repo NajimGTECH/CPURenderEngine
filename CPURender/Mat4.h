@@ -223,6 +223,14 @@ namespace math
         Vector3<T> extract_position() const;
 
         /**
+         * @brief Replaces the translation component of the matrix (row 3).
+         *
+         * The rotation and the scale stay as they are.
+         * @param position The new position.
+         */
+        void set_position(const Vector3<T>& position);
+
+        /**
          * @brief Extracts the scale component of the matrix.
          *
          * The scale on each axis is the length of the corresponding axis row (rows 0, 1, 2).

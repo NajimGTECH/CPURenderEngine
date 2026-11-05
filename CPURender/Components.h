@@ -9,7 +9,6 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "Particle.h"
-#include "Quaternion.h"
 #include "Vec3.h"
 
 // Components are plain data: what an entity IS. What it DOES lives in the systems (Systems.h).
@@ -41,17 +40,12 @@ struct NameComponent
 	std::string name;
 };
 
-// Where an entity is in the world. Every system reads its position from here.
+// Where an entity is in the world: its position, rotation and scale, all in one matrix.
+// It starts as the identity: at the origin, not rotated, scale 1.
+// Every system reads its position from here (transformMatrix.extract_position()).
 struct TransformComponent
 {
-	math::Vector3<float> position;
-	math::Quaternion rotation;
-	math::Vector3<float> scale{ 1.0f, 1.0f, 1.0f };
-
-	math::Mat4<float> model_matrix() constF
-	{
-		return math::Mat4<float>::trs(position, rotation, scale);
-	}
+	math::Mat4<float> transformMatrix;
 };
 
 

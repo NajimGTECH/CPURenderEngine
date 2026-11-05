@@ -54,7 +54,8 @@ for (int entity : em.fetch_all_entities(ids.transform, ids.spin))
 {
     TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
     const SpinComponent& spin = *static_cast<SpinComponent*>(em.get_component(entity, ids.spin));
-    transform.rotation = math::Quaternion::from_axis_angle(spin.axis, seconds * spin.speed);
+    const math::Quaternion rotation = math::Quaternion::from_axis_angle(spin.axis, seconds * spin.speed);
+    transform.transformMatrix = math::Mat4<float>::trs(transform.transformMatrix.extract_position(), rotation, transform.transformMatrix.extract_scale());
 }
 ```
 
@@ -157,8 +158,7 @@ static void create_big_cow(EntityManager& em, const ComponentIDs& ids, const Ass
     em.add_component(entity, ids.name, &name);
 
     TransformComponent transform;
-    transform.position = math::Vector3<float>(0.0f, 0.0f, -2.0f);
-    transform.scale = math::Vector3<float>(2.0f, 2.0f, 2.0f);
+    transform.transformMatrix = math::Mat4<float>::trs(math::Vector3<float>(0.0f, 0.0f, -2.0f), math::Quaternion(), math::Vector3<float>(2.0f, 2.0f, 2.0f));
     em.add_component(entity, ids.transform, &transform);
 
     MeshComponent mesh{ &assets.spot };
@@ -198,7 +198,9 @@ The order of the calls in `scene::create` sets the entity ids, and so the order 
        {
            TransformComponent& transform = *static_cast<TransformComponent*>(em.get_component(entity, ids.transform));
            const BobComponent& bob = *static_cast<BobComponent*>(em.get_component(entity, ids.bob));
-           transform.position.y = bob.baseHeight + bob.amplitude * std::sin(seconds * bob.speed);
+           math::Vector3<float> position = transform.transformMatrix.extract_position();
+           position.y = bob.baseHeight + bob.amplitude * std::sin(seconds * bob.speed);
+           transform.transformMatrix.set_position(position);
        }
    }
    ```

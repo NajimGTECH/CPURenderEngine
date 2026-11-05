@@ -43,7 +43,7 @@ static std::vector<Light> gather_lights(EntityManager& em, const ComponentIDs& i
         if (!component.enabled) continue;
 
         Light light = component.light;
-        light.position = transform.position;
+        light.position = transform.transformMatrix.extract_position();
         lights.push_back(light);
     }
 
@@ -62,13 +62,13 @@ static std::vector<Drawable> gather_drawables(EntityManager& em, const Component
         const MaterialComponent& material = *static_cast<MaterialComponent*>(em.get_component(entity, ids.material));
 
         Drawable drawable;
-        drawable.model = transform.model_matrix();
+        drawable.model = transform.transformMatrix;
         drawable.mesh = mesh.mesh;
         drawable.material = material.material;
         drawable.opacity = camera.transparencyEnabled
             ? std::min(material.material->opacity, camera.transparentOpacity)
             : material.material->opacity;
-        drawable.distanceToCamera = (transform.position - cameraPosition).length_squared();
+        drawable.distanceToCamera = (transform.transformMatrix.extract_position() - cameraPosition).length_squared();
         drawables.push_back(drawable);
     }
 
@@ -97,7 +97,7 @@ void systems::render(EntityManager& em, const ComponentIDs& ids)
     const CameraComponent& camera = *static_cast<CameraComponent*>(em.get_component(cameraEntity, ids.camera));
 
     // The shader needs the camera position for the highlights.
-    const math::Vector3<float> cameraPosition = static_cast<TransformComponent*>(em.get_component(cameraEntity, ids.transform))->position;
+    const math::Vector3<float> cameraPosition = static_cast<TransformComponent*>(em.get_component(cameraEntity, ids.transform))->transformMatrix.extract_position();
     const math::Mat4<float> viewProjection = compute_view_projection(cameraPosition, camera);
 
     const std::vector<Light> lights = gather_lights(em, ids);

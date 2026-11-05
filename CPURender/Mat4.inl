@@ -334,6 +334,14 @@ namespace math
     }
 
     template <typename T>
+    void Mat4<T>::set_position(const Vector3<T>& position)
+    {
+        m[3][0] = position.x;
+        m[3][1] = position.y;
+        m[3][2] = position.z;
+    }
+
+    template <typename T>
     Vector3<T> Mat4<T>::extract_scale() const
     {
         Vector3<T> scale;
