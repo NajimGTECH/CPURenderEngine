@@ -34,8 +34,10 @@ Color3 shader::shade(const Fragment& fragment, const Material& material,
     // Ambient: like in chapter 10 it keeps the surface colour, so the shadowed side keeps its texture
     math::Vector3<float> color = math::Vector3<float>::scale(material.ambient, albedo) * AMBIENT_LIGHT;
 
-    // Direction from the surface towards the eye, for the highlight
-    const math::Vector3<float> toCamera = (cameraPosition - fragment.position).normalized();
+    // Direction from the surface towards the eye, for the highlight. Only Blinn-Phong has one.
+    const math::Vector3<float> toCamera = material.shading == ShadingModel::BlinnPhong
+        ? (cameraPosition - fragment.position).normalized()
+        : math::Vector3<float>();
 
     // Every light adds its own contribution
     for (const Light& light : lights)

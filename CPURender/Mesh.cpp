@@ -74,6 +74,12 @@ static std::vector<math::Vector3<float>> compute_vertex_normals(const Mesh& mesh
     return normals;
 }
 
+void mesh::compute_normals(Mesh& outMesh)
+{
+    outMesh.faceNormals = compute_face_normals(outMesh);
+    outMesh.vertexNormals = compute_vertex_normals(outMesh, outMesh.faceNormals);
+}
+
 bool mesh::load_obj(const std::string& path, Mesh& outMesh)
 {
     std::ifstream file(path);
@@ -153,8 +159,7 @@ bool mesh::load_obj(const std::string& path, Mesh& outMesh)
     }
 
     // Only once every index is known to be valid
-    outMesh.faceNormals = compute_face_normals(outMesh);
-    outMesh.vertexNormals = compute_vertex_normals(outMesh, outMesh.faceNormals);
+    compute_normals(outMesh);
 
     return true;
 }

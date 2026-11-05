@@ -19,6 +19,12 @@
     <Filter Include="ECS">
       <UniqueIdentifier>{C94A07D2-61E8-4B35-8F1A-2D7E93B0C516}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Editor">
+      <UniqueIdentifier>{3E8F15A6-B07C-4D92-A1C3-6F24D9E07B18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{A25D70C9-4E1B-4F86-93D7-0B8C61F2E347}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -65,6 +71,18 @@
     </ClCompile>
     <ClCompile Include="HudSystem.cpp">
       <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="UISystem.cpp">
+      <Filter>ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="Noise.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="UI.cpp">
+      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="Chapters\Chapter01.cpp">
       <Filter>Chapters</Filter>
@@ -151,6 +169,15 @@
     </ClInclude>
     <ClInclude Include="Systems.h">
       <Filter>ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="Noise.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Editor.h">
+      <Filter>Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="UI.h">
+      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="Chapters\Chapters.h">
       <Filter>Chapters</Filter>

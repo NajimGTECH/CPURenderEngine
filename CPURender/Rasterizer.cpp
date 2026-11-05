@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <span>
 #include <vector>
 
@@ -111,24 +110,6 @@ int rasterizer::clip_triangle_near(const ClipVertex& vA, const ClipVertex& vB, c
     return 2;
 }
 
-// "Over" blending: lays a colour on top of what is already in the framebuffer.
-// result = color * opacity + background * (1 - opacity)
-static Color3 blend_over_framebuffer(const Color3& color, int index, float opacity)
-{
-    // frameBuffer uses ARGB8888 (0xAARRGGBB).
-    const uint32_t background = frameBuffer[index];
-    const float a = std::clamp(opacity, 0.0f, 1.0f);
-    const uint8_t backgroundR = static_cast<uint8_t>((background >> 16) & 0xFF);
-    const uint8_t backgroundG = static_cast<uint8_t>((background >> 8) & 0xFF);
-    const uint8_t backgroundB = static_cast<uint8_t>(background & 0xFF);
-
-    return Color3{
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.r * a + backgroundR * (1.0f - a))), 0, 255)),
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.g * a + backgroundG * (1.0f - a))), 0, 255)),
-        static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(color.b * a + backgroundB * (1.0f - a))), 0, 255))
-    };
-}
-
 // Top-left fill rule: a pixel lying exactly on an edge shared by two triangles must be drawn by only ONE of them.
 // Opaque triangles don't mind (the second one fails the depth test), but a transparent pixel
 // blended twice shows up as a bright line along every edge of the mesh.
@@ -140,6 +121,24 @@ static bool is_top_left_edge(const Pixel& from, const Pixel& to)
     const int dx = to.x - from.x;
     const int dy = to.y - from.y;
     return dy < 0 || (dy == 0 && dx > 0);
+}
+
+// The edge function A->B at the top left corner of a box, and how much it changes per pixel.
+// edge(x, y) = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
+struct EdgeWalker
+{
+    int start = 0;
+    int stepX = 0; // one pixel to the right
+    int stepY = 0; // one pixel down
+};
+
+static EdgeWalker make_edge_walker(const Pixel& a, const Pixel& b, const BoundingBox& box)
+{
+    return EdgeWalker{
+        (b.x - a.x) * (box.minY - a.y) - (b.y - a.y) * (box.minX - a.x),
+        a.y - b.y,
+        b.x - a.x
+    };
 }
 
 // Same fill as chapter 11, but the rasterizer no longer knows anything about lighting:
@@ -182,36 +181,59 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     const math::Vector3<float> pOverWB = vB.worldPosition * vB.invW;
     const math::Vector3<float> pOverWC = vC.worldPosition * vC.invW;
 
+    // An edge function is linear: moving one pixel always changes it by the same amount.
+    // So it is computed once in the corner of the box, then only updated with an addition per pixel.
+    const EdgeWalker walkerA = make_edge_walker(pB, pC, box);
+    const EdgeWalker walkerB = make_edge_walker(pC, pA, box);
+    const EdgeWalker walkerC = make_edge_walker(pA, pB, box);
+
+    int rowEdgeA = walkerA.start;
+    int rowEdgeB = walkerB.start;
+    int rowEdgeC = walkerC.start;
+
     for (int y = box.minY; y <= box.maxY; y++)
     {
-        for (int x = box.minX; x <= box.maxX; x++)
-        {
-            const Pixel point{ x, y };
-            const float edgeA = rasterizer::edge(pB, pC, point);
-            const float edgeB = rasterizer::edge(pC, pA, point);
-            const float edgeC = rasterizer::edge(pA, pB, point);
+        int edgeA = rowEdgeA;
+        int edgeB = rowEdgeB;
+        int edgeC = rowEdgeC;
+        rowEdgeA += walkerA.stepY;
+        rowEdgeB += walkerB.stepY;
+        rowEdgeC += walkerC.stepY;
 
-            // Outside the triangle, or on an edge that belongs to the neighbouring triangle
-            if (edgeA < 0 || edgeB < 0 || edgeC < 0) continue;
+        bool enteredTriangle = false;
+
+        for (int x = box.minX; x <= box.maxX; x++, edgeA += walkerA.stepX, edgeB += walkerB.stepX, edgeC += walkerC.stepX)
+        {
+            // Outside the triangle. A triangle is convex, so a row crosses it only once:
+            // after leaving it, the rest of the row can be skipped.
+            if (edgeA < 0 || edgeB < 0 || edgeC < 0)
+            {
+                if (enteredTriangle) break;
+                continue;
+            }
+            enteredTriangle = true;
+
+            // On an edge that belongs to the neighbouring triangle
             if ((edgeA == 0 && !topLeftA) || (edgeB == 0 && !topLeftB) || (edgeC == 0 && !topLeftC)) continue;
 
-            const float weightA = edgeA / area;
-            const float weightB = edgeB / area;
-            const float weightC = edgeC / area;
+            const float weightA = static_cast<float>(edgeA) / area;
+            const float weightB = static_cast<float>(edgeB) / area;
+            const float weightC = static_cast<float>(edgeC) / area;
 
             // Depth test
             const float z = weightA * vA.z + weightB * vB.z + weightC * vC.z;
             const int index = y * WIDTH + x;
             if (z >= depthBuffer[index]) continue;
 
-            // Blend the pre-divided attributes, then divide by the blended 1/w to get the real ones back
-            const float invW = weightA * vA.invW + weightB * vB.invW + weightC * vC.invW;
+            // Blend the pre-divided attributes, then divide by the blended 1/w to get the real ones back.
+            // Dividing by 1/w is multiplying by w: one division here instead of one per value.
+            const float w = 1.0f / (weightA * vA.invW + weightB * vB.invW + weightC * vC.invW);
 
             Fragment fragment;
-            fragment.uv.u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) / invW;
-            fragment.uv.v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) / invW;
-            fragment.position = (pOverWA * weightA + pOverWB * weightB + pOverWC * weightC) / invW;
-            fragment.normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) / invW;
+            fragment.uv.u = (weightA * uOverWA + weightB * uOverWB + weightC * uOverWC) * w;
+            fragment.uv.v = (weightA * vOverWA + weightB * vOverWB + weightC * vOverWC) * w;
+            fragment.position = (pOverWA * weightA + pOverWB * weightB + pOverWC * weightC) * w;
+            fragment.normal = (nOverWA * weightA + nOverWB * weightB + nOverWC * weightC) * w;
             fragment.normal.normalize(); // see chapter 11
 
             Color3 color = shader::shade(fragment, material, lights, cameraPosition);
@@ -226,7 +248,9 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
             {
                 depthBuffer[index] = z;
             }
-            add_pixel_to_buffer(Pixel{ x, y, color });
+
+            // Directly into the framebuffer: the box is clamped to the screen, so the pixel can't be outside.
+            frameBuffer[index] = color.to_rgb();
         }
     }
 }
@@ -254,6 +278,17 @@ static void project_and_draw(std::span<const ClipVertex> triangle, const Materia
         Pixel{ projected[2].x, projected[2].y }) >= 0.0f) return;
 
     draw_triangle(projected[0], projected[1], projected[2], material, lights, cameraPosition, opacity);
+}
+
+// True if the 3 corners are all past the same side of the screen: the triangle can't touch a single pixel.
+// On screen <=> -w <= x <= w and -w <= y <= w, so these tests also work without dividing by w.
+// It saves the clipping and the projection of every triangle on the sides and behind the camera.
+static bool is_off_screen(const ClipVertex& a, const ClipVertex& b, const ClipVertex& c)
+{
+    return (a.x > a.w && b.x > b.w && c.x > c.w)
+        || (a.x < -a.w && b.x < -b.w && c.x < -c.w)
+        || (a.y > a.w && b.y > b.w && c.y > c.w)
+        || (a.y < -a.w && b.y < -b.w && c.y < -c.w);
 }
 
 // Draws a mesh placed in the world by its model matrix, with a material.
@@ -295,6 +330,8 @@ void rasterizer::draw_mesh(const Mesh& mesh,
     for (const size_t faceIndex : faceOrder)
     {
         const Face& face = mesh.faces[faceIndex];
+        if (is_off_screen(clipVertices[face.a], clipVertices[face.b], clipVertices[face.c])) continue;
+
         ClipVertex vA = clipVertices[face.a];
         ClipVertex vB = clipVertices[face.b];
         ClipVertex vC = clipVertices[face.c];

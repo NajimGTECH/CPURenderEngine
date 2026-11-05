@@ -2,18 +2,96 @@
 #include <SDL3/SDL_render.h>
 
 #include "ECS.h"
+#include "Editor.h"
 #include "Framebuffer.h"
 #include "Scene.h"
 #include "Systems.h"
 #include "Chapters/Chapters.h"
 
 #include <cstdlib>
+#include <format>
 #include <iostream>
 #include <algorithm>
 
 // The application shell: opens the window, then runs the frame loop.
-// Nothing here knows what is in the scene: it comes from Scene.cpp, and the systems drive it.
+// The demo scene comes from Scene.cpp, and the systems drive it.
+// The only content created here is the test of the week 4 modules (the terrain and the UI, just below).
 // See ARCHITECTURE.md at the root of the repository for the big picture.
+
+// Week 4 test: a generated terrain
+
+// A normal entity with a transform, a mesh and a material: the render system draws it like a cow.
+static void create_test_terrain(EntityManager& em, const ComponentIDs& ids, const Mesh& terrainMesh, const Material& terrainMaterial)
+{
+    const int entity = em.create_entity();
+
+    NameComponent name{ "terrain" };
+    em.add_component(entity, ids.name, &name);
+
+    TransformComponent transform;
+    transform.transformMatrix.set_position(math::Vector3<float>(0.0f, -5.2f, 0.0f));
+    em.add_component(entity, ids.transform, &transform);
+
+    MeshComponent mesh;
+    mesh.mesh = &terrainMesh;
+    em.add_component(entity, ids.mesh, &mesh);
+
+    MaterialComponent material;
+    material.material = &terrainMaterial;
+    em.add_component(entity, ids.material, &material);
+}
+
+// Week 4 test: the UI module
+
+// A panel in the top right corner: a title and a caption (Text) around the terrain's texture (Image).
+static void create_test_ui(EntityManager& em, const ComponentIDs& ids, const TerrainSettings& terrainSettings, const Texture& terrainTexture)
+{
+    const int canvasEntity = em.create_entity();
+
+    NameComponent canvasName{ "ui panel" };
+    em.add_component(canvasEntity, ids.name, &canvasName);
+
+    CanvasComponent canvas;
+    canvas.canvas = Canvas{ WIDTH - 172, 12, 160, 200 };
+    em.add_component(canvasEntity, ids.canvas, &canvas);
+
+    const int titleEntity = em.create_entity();
+
+    NameComponent titleName{ "ui title" };
+    em.add_component(titleEntity, ids.name, &titleName);
+
+    TextComponent title;
+    title.canvasEntity = canvasEntity;
+    title.text.content = "Terrain";
+    title.text.scale = 2.0f;
+    title.text.color = Color3{ 255, 220, 120 };
+    em.add_component(titleEntity, ids.text, &title);
+
+    const int imageEntity = em.create_entity();
+
+    NameComponent imageName{ "ui minimap" };
+    em.add_component(imageEntity, ids.name, &imageName);
+
+    ImageComponent image;
+    image.canvasEntity = canvasEntity;
+    image.image.texture = &terrainTexture;
+    image.image.y = 20;
+    image.image.width = 160;
+    image.image.height = 160;
+    image.image.opacity = 0.85f;
+    em.add_component(imageEntity, ids.image, &image);
+
+    const int captionEntity = em.create_entity();
+
+    NameComponent captionName{ "ui caption" };
+    em.add_component(captionEntity, ids.name, &captionName);
+
+    TextComponent caption;
+    caption.canvasEntity = canvasEntity;
+    caption.text.content = std::format("seed {} | {}x{}", terrainSettings.seed, terrainSettings.resolution, terrainSettings.resolution);
+    caption.text.y = 186;
+    em.add_component(captionEntity, ids.text, &caption);
+}
 
 // Main function
 
@@ -23,8 +101,19 @@ int main()
     Assets assets;
     if (!scene::load_assets(assets)) return EXIT_FAILURE;
 
+    // Same for the terrain, except it is generated instead of loaded.
+    const TerrainSettings terrainSettings;
+    Mesh terrainMesh;
+    Material terrainMaterial;
+    terrainMaterial.name = "terrain";
+    editor::generate_terrain_mesh(terrainSettings, terrainMesh);
+    editor::generate_terrain_texture(terrainSettings, terrainMaterial.diffuseMap);
+    std::cout << "Generated terrain:\t" << terrainMesh.vertices.size() << " vertices, " << terrainMesh.faces.size() << " faces\n";
+
     ECS ecs;
     const ComponentIDs ids = scene::create(ecs.get_entity_manager(), assets);
+    create_test_terrain(ecs.get_entity_manager(), ids, terrainMesh, terrainMaterial);
+    create_test_ui(ecs.get_entity_manager(), ids, terrainSettings, terrainMaterial.diffuseMap);
 
     // Init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -39,6 +128,9 @@ int main()
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (renderer == nullptr) { SDL_Log("Renderer could not be created.\n"); return EXIT_FAILURE; }
     std::cout << "Initialized renderer:\t" << SDL_GetRendererName(renderer) << '\n';
+
+    // SDL's coordinates are framebuffer pixels whatever the size of the window, so the UI text stays lined up with the images.
+    SDL_SetRenderLogicalPresentation(renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_STRETCH);
 
     SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
     if (texture == nullptr) { SDL_Log("Texture could not be created.\n"); return EXIT_FAILURE; }
@@ -73,12 +165,16 @@ int main()
         systems::render(em, ids);
         });
 
+    // The UI images are pixels like the rest of the frame, on top of the 3D.
+    ecs.add_system([&](EntityManager& em) { systems::draw_ui_images(em, ids); });
+
     // Upload the CPU framebuffer, then draw the text on top.
     ecs.add_system([&](EntityManager&) {
         SDL_RenderClear(renderer);
         SDL_UpdateTexture(texture, nullptr, frameBuffer.data(), WIDTH * sizeof(uint32_t));
         SDL_RenderTexture(renderer, texture, nullptr, nullptr);
         });
+    ecs.add_system([&](EntityManager& em) { systems::draw_ui_text(em, ids, renderer); });
     ecs.add_system([&](EntityManager& em) { systems::draw_hud(em, ids, renderer); });
     ecs.add_system([&](EntityManager&) { SDL_RenderPresent(renderer); });
 

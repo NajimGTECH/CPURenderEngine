@@ -15,15 +15,19 @@ A software renderer: the CPU computes every pixel, and SDL3 is only used to open
     |      |
     |      |-- EntityManager + Components      the data
     |      |
+    |      |-- UI                              canvases, images and text -> pixels and SDL text
+    |      |
     |      '-- Rasterizer                      triangles and particles -> pixels
     |             |
     |             |-- Shader, Light, Material, Texture     the colour of one pixel
     |             '-- Framebuffer                          where the pixels go
     |
+    |-- Editor           generates content: fills a Mesh and a Texture, using Noise
+    |
     '-- Chapters/        the course chapters, kept runnable, outside the ECS
 ```
 
-Each layer only knows the ones below it. The rasterizer has never heard of an entity, and `main.cpp` doesn't know what is in the scene.
+Each layer only knows the ones below it. The rasterizer has never heard of an entity. `main.cpp` doesn't know what is in the demo scene: it only creates the test content of the week 4 modules, the terrain and the UI panel.
 
 ## The ECS in three ideas
 
@@ -67,7 +71,7 @@ ecs.add_system([&](EntityManager& em) { systems::spin_system(em, ids, seconds); 
 
 ## The entities
 
-All created in `Scene.cpp`. Every entity also has a `NameComponent` and a `TransformComponent`.
+Created in `Scene.cpp`. Every entity also has a `NameComponent` and a `TransformComponent`.
 
 | Entity | Mesh | Material | Camera | Light | Particle | Spin | Orbit | LightSweep | LightToggle |
 |---|---|---|---|---|---|---|---|---|---|
@@ -78,6 +82,15 @@ All created in `Scene.cpp`. Every entity also has a `NameComponent` and a `Trans
 | 4 cows | ✓ | ✓ | | | | ✓ | | | |
 | fountain | | | | | ✓ | | | | |
 
+`main.cpp` adds the test of the week 4 modules. These only have a `NameComponent`, plus:
+
+| Entity | Components |
+|---|---|
+| terrain | `TransformComponent`, `MeshComponent`, `MaterialComponent` |
+| ui panel | `CanvasComponent` |
+| ui title, ui caption | `TextComponent` |
+| ui minimap | `ImageComponent` |
+
 The bulb shows the point of this design: it is one entity with a light, a flame and an orbit, so the flame follows the bulb and no code had to link them.
 
 Meshes and materials are **shared**: `MeshComponent` and `MaterialComponent` only hold a pointer, and the four cows point to the same `Mesh`. The data itself lives in `Assets` (`Scene.h`), which must outlive the entities.
@@ -86,12 +99,14 @@ Meshes and materials are **shared**: `MeshComponent` and `MaterialComponent` onl
 
 | System | File | Needs | Does |
 |---|---|---|---|
-| `handle_key` | `Systems.cpp` | Camera / Particle / Light + LightToggle | Flips transparency (T), emitters (P), lights (their own key) |
+| `handle_key` | `Systems.cpp` | Camera / Particle / Canvas / Light + LightToggle | Flips transparency (T), emitters (P), canvases (U), lights (their own key) |
 | `spin_system` | `Systems.cpp` | Transform, Spin | Sets the rotation |
 | `orbit_system` | `Systems.cpp` | Transform, Orbit | Moves the entity on its circle |
 | `light_sweep_system` | `Systems.cpp` | Transform, Light, LightSweep | Aims the light |
 | `particle_system` | `Systems.cpp` | Transform, Particle | Spawns, ages and moves the particles |
 | `render` | `RenderSystem.cpp` | Transform + Camera, Light, Mesh + Material, Particle | Draws into the framebuffer |
+| `draw_ui_images` | `UISystem.cpp` | Canvas, Image | Draws the images into the framebuffer |
+| `draw_ui_text` | `UISystem.cpp` | Canvas, Text | Draws the texts through SDL |
 | `draw_hud`, `update_window_title` | `HudSystem.cpp` | Name, Light, LightToggle, Particle, Camera | Shows the state of the scene |
 
 Clearing the framebuffer, uploading it and presenting are systems too, but they only touch SDL and the framebuffer, so they are lambdas in `main.cpp`. `handle_key` and `update_window_title` are not added to the ECS: they use the same API, but run on an SDL event and once per second, not once per frame.
@@ -113,7 +128,9 @@ main loop
        |     1. opaque meshes       fill the depth buffer
        |     2. particles           hidden by the opaque meshes
        |     3. transparent meshes  back to front, test the depth but don't write it
+       |- systems::draw_ui_images    UI images, into the framebuffer
        |- upload the framebuffer to an SDL texture
+       |- systems::draw_ui_text      UI text on top, through SDL
        |- systems::draw_hud          text on top, through SDL
        '- present
 ```
@@ -125,6 +142,37 @@ vertices -> clip space -> near plane clipping -> divide by w + viewport -> backf
          -> for each pixel of the triangle: depth test -> shader::shade -> framebuffer
 ```
 
+## The terrain
+
+`editor::generate_terrain_mesh` and `editor::generate_terrain_texture` run once, before the loop. After that the terrain is an ordinary mesh with an ordinary material: no system knows it was generated.
+
+```
+noise::perlin     smooth random values: random directions on a grid, blended with a fade curve
+     |
+noise::fractal    5 layers of Perlin noise, each one with finer and weaker details
+     |
+height_at         the height of the ground at a position on the terrain, in [0, 1]
+     |
+     |-- mesh     a grid of vertices, each one raised by height_at, 2 triangles per square, then the normals
+     '-- texture  a texel per position, coloured by height_at: grass -> rock -> snow, with some fine noise
+```
+
+The mesh and the texture read the same `height_at`, which is why the snow is on the peaks. Everything comes from `TerrainSettings`, so the same seed always gives the same terrain.
+
+## The UI
+
+| Element | What it is | Reaches the screen |
+|---|---|---|
+| `Canvas` | An area of the screen. Its elements are placed relative to it, and cut at its edges | |
+| `Image` | A texture stretched over a rectangle, with an opacity | Written into the framebuffer, before the upload |
+| `Text` | One line of SDL's debug font, with a colour and a scale | Drawn through SDL, after the upload |
+
+An element belongs to a canvas through `canvasEntity`, the id of the canvas entity. Hiding or moving the canvas affects all its elements, and no system has to know the elements individually.
+
+Because of the two steps, a text is always on top of every image, whatever the order of the entities. Inside each step, canvases are drawn in increasing entity id, and so are their elements.
+
+`main.cpp` calls `SDL_SetRenderLogicalPresentation`, which makes SDL's coordinates framebuffer pixels at any window size. Without it the text would drift away from the images, which are stretched with the framebuffer, as soon as the window is resized.
+
 ## Where to find things
 
 | File | Role |
@@ -134,11 +182,14 @@ vertices -> clip space -> near plane clipping -> divide by w + viewport -> backf
 | `Components.h` | Every component, and their `ComponentIDs` |
 | `ECS.h`, `EntityManager.h`, `ComponentStorage.h` | The ECS itself |
 | `Systems.h` | The declaration of the systems |
-| `Systems.cpp`, `RenderSystem.cpp`, `HudSystem.cpp` | The systems |
+| `Systems.cpp`, `RenderSystem.cpp`, `HudSystem.cpp`, `UISystem.cpp` | The systems |
 | `Rasterizer.h/.cpp` | Clipping, triangle fill, depth test, transparency, particle drawing |
 | `Shader.h/.cpp` | The colour of one pixel (unlit, Lambert, Blinn-Phong) |
 | `Light`, `Material`, `Mesh`, `Texture`, `Particle` | The data and the logic of each concept, independent of the ECS |
-| `Framebuffer.h/.cpp` | Screen size, frame buffer, depth buffer |
+| `Editor.h/.cpp` | Terrain generation: the mesh and the texture |
+| `Noise.h/.cpp` | Perlin and fractal noise |
+| `UI.h/.cpp` | Canvas, Image and Text, and how to draw them |
+| `Framebuffer.h/.cpp` | Screen size, frame buffer, depth buffer, blending |
 | `Vec3`, `Mat4`, `Quaternion` | The math library |
 | `Chapters/` | The course chapters |
 
@@ -234,4 +285,7 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 - **Components are copied when added**, and copying a vector loses its reserved memory. That's why `add_particles` in `Scene.cpp` reserves the particle pool after adding the component.
 - **The framebuffer is a global** on purpose: it holds pixels rather than scene data, and the chapters draw into it too.
 - **Transparency is approximate**: meshes and faces are sorted from back to front (painter's algorithm), which can fail on faces that intersect.
+- **Generating the terrain doesn't cost any FPS**: it takes about 145 ms, once, before the loop. After that it costs what any mesh costs to draw.
+- **The terrain is the slowest thing in the frame**: it covers about half of the screen, and the cost is per pixel, so its size on screen matters much more than its number of triangles. Measured in Release, without the particles and the UI: 15 ms for the terrain and 11 ms for the cows. Going from 96 to 64 vertices per side only saves about 1 ms.
+- **The per-pixel code is written for speed**: `draw_triangle` updates its edge functions with additions instead of computing them for each pixel, and `texture::sample_bilinear` avoids `std::floor` and `std::round`, which alone took a frame from 49 ms to 28 ms.
 - **Known bug, chapter 8 draws nothing**: `clear_zbuffer()` in `Chapter08.cpp` is never called, so every pixel fails the depth test. The live scene isn't affected.

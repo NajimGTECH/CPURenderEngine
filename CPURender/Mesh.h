@@ -28,7 +28,7 @@ struct Mesh
     std::vector<UV> uvs;
     std::vector<Face> faces;
 
-    // Computed by load_obj, in the model's local space. They don't depend on the rotation: computed only once.
+    // Computed by compute_normals, in the model's local space. They don't depend on the rotation: computed only once.
     std::vector<math::Vector3<float>> faceNormals;   // one per face (chapter 10)
     std::vector<math::Vector3<float>> vertexNormals; // one per vertex, the average of the neighbouring face normals (chapter 11)
 };
@@ -38,4 +38,7 @@ namespace mesh
     // Minimal Wavefront OBJ loader: reads "v x y z", "vt u v" and "f i j k" lines, ignores the rest.
     // Faces must be triangles. Returns false if the file can't be read or is invalid.
     bool load_obj(const std::string& path, Mesh& outMesh);
+
+    // Fills faceNormals and vertexNormals from the vertices and the faces. Every face index must be valid.
+    void compute_normals(Mesh& outMesh);
 }

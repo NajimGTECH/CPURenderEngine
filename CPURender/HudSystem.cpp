@@ -74,7 +74,7 @@ void systems::draw_hud(EntityManager& em, const ComponentIDs& ids, SDL_Renderer*
     SDL_RenderDebugText(renderer, 12.0f, 26.0f, describe_pass(em, ids).c_str());
     SDL_RenderDebugText(renderer, 12.0f, 40.0f, describe_lights(em, ids).c_str());
     SDL_RenderDebugText(renderer, 12.0f, 54.0f, describe_particles(em, ids).c_str());
-    SDL_RenderDebugText(renderer, 12.0f, 68.0f, "ESC: quit");
+    SDL_RenderDebugText(renderer, 12.0f, 68.0f, "U: show / hide the UI | ESC: quit");
 }
 
 // "Shaders - sun ON, bulb ON, spot ON (keys 1/2/3) | opaque (key T) | particles ON (key P) | 60.0 FPS (16.67 ms)"

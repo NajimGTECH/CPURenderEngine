@@ -39,6 +39,9 @@ static ComponentIDs register_components(EntityManager& em)
     ids.orbit = em.register_component<OrbitComponent>();
     ids.lightSweep = em.register_component<LightSweepComponent>();
     ids.lightToggle = em.register_component<LightToggleComponent>();
+    ids.canvas = em.register_component<CanvasComponent>();
+    ids.image = em.register_component<ImageComponent>();
+    ids.text = em.register_component<TextComponent>();
     return ids;
 }
 

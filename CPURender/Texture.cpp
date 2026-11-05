@@ -103,32 +103,31 @@ Color3 texture::sample_bilinear(
         return Color3{ 0, 0, 0, 255 };
     }
 
-    // Wrap UV coordinates into [0, 1[.
-    u -= std::floor(u);
-    v -= std::floor(v);
+    // This runs for every pixel of a textured mesh, so it avoids std::floor and std::round: they are function calls.
+
+    // Wrap UV coordinates into [0, 1[. Most of them already are, which only costs the test.
+    if (u < 0.0f || u >= 1.0f) u -= std::floor(u);
+    if (v < 0.0f || v >= 1.0f) v -= std::floor(v);
 
     // Convert UV coordinates into texel space.
     // The half-texel offset aligns UV coordinates with texel centers.
     const float x = u * texture.width - 0.5f;
     const float y = (1.0f - v) * texture.height - 0.5f;
 
-    const int x0 = static_cast<int>(std::floor(x));
-    const int y0 = static_cast<int>(std::floor(y));
+    // x and y are at least -0.5: + 1 makes them positive, where a cast to int rounds down like floor.
+    const int x0 = static_cast<int>(x + 1.0f) - 1;
+    const int y0 = static_cast<int>(y + 1.0f) - 1;
 
     const float tx = x - static_cast<float>(x0);
     const float ty = y - static_cast<float>(y0);
 
-    // Repeat texture coordinates at the image boundaries.
-    const auto wrap = [](int value, int size) -> int
-        {
-            return ((value % size) + size) % size;
-        };
+    // Repeat texture coordinates at the image boundaries: x0 and y0 can only go one texel too far.
+    // The tests also cover any other value, which a NaN coordinate would give: the texels stay in bounds.
+    const int x1 = (x0 < 0 || x0 >= texture.width) ? texture.width - 1 : x0;
+    const int x2 = (x0 < 0 || x0 >= texture.width - 1) ? 0 : x0 + 1;
 
-    const int x1 = wrap(x0, texture.width);
-    const int x2 = wrap(x0 + 1, texture.width);
-
-    const int y1 = wrap(y0, texture.height);
-    const int y2 = wrap(y0 + 1, texture.height);
+    const int y1 = (y0 < 0 || y0 >= texture.height) ? texture.height - 1 : y0;
+    const int y2 = (y0 < 0 || y0 >= texture.height - 1) ? 0 : y0 + 1;
 
     // Four neighbouring texels.
     const Color3& c00 = texture.texels[y1 * texture.width + x1];
@@ -136,42 +135,23 @@ Color3 texture::sample_bilinear(
     const Color3& c01 = texture.texels[y2 * texture.width + x1];
     const Color3& c11 = texture.texels[y2 * texture.width + x2];
 
-    // Linear interpolation between two values.
-    const auto lerp = [](float a, float b, float t) -> float
-        {
-            return a + (b - a) * t;
-        };
+    // How much each texel counts: the closer the point is to it, the more. They add up to 1.
+    const float weight00 = (1.0f - tx) * (1.0f - ty);
+    const float weight10 = tx * (1.0f - ty);
+    const float weight01 = (1.0f - tx) * ty;
+    const float weight11 = tx * ty;
 
     // Bilinear interpolation for one color channel.
-    const auto channel = [&](uint8_t Color3::* member) -> uint8_t
+    // A blend of values in [0, 255] stays in [0, 255]: + 0.5 then the cast rounds to the nearest integer.
+    const auto blend = [&](uint8_t value00, uint8_t value10, uint8_t value01, uint8_t value11) -> uint8_t
         {
-            const float top = lerp(
-                static_cast<float>(c00.*member),
-                static_cast<float>(c10.*member),
-                tx
-            );
-
-            const float bottom = lerp(
-                static_cast<float>(c01.*member),
-                static_cast<float>(c11.*member),
-                tx
-            );
-
-            const float value = lerp(top, bottom, ty);
-
-            return static_cast<uint8_t>(
-                std::clamp(
-                    static_cast<int>(std::round(value)),
-                    0,
-                    255
-                )
-                );
+            return static_cast<uint8_t>(value00 * weight00 + value10 * weight10 + value01 * weight01 + value11 * weight11 + 0.5f);
         };
 
     return Color3{
-        channel(&Color3::r),
-        channel(&Color3::g),
-        channel(&Color3::b),
-        channel(&Color3::a)
+        blend(c00.r, c10.r, c01.r, c11.r),
+        blend(c00.g, c10.g, c01.g, c11.g),
+        blend(c00.b, c10.b, c01.b, c11.b),
+        blend(c00.a, c10.a, c01.a, c11.a)
     };
 }

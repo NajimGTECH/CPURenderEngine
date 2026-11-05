@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-// The input and simulation systems. Drawing is in RenderSystem.cpp, the on-screen text in HudSystem.cpp.
+// The input and simulation systems. Drawing is in RenderSystem.cpp, the on-screen text in HudSystem.cpp, the UI in UISystem.cpp.
 
 // ---- Input ----
 
@@ -25,6 +25,16 @@ void systems::handle_key(EntityManager& em, const ComponentIDs& ids, SDL_Keycode
         {
             ParticleComponent& particles = *static_cast<ParticleComponent*>(em.get_component(entity, ids.particle));
             particles.emitting = !particles.emitting;
+        }
+    }
+
+    // U: hides / shows the canvases, and so everything on them.
+    if (key == SDLK_U)
+    {
+        for (int entity : em.fetch_all_entities(ids.canvas))
+        {
+            CanvasComponent& canvas = *static_cast<CanvasComponent*>(em.get_component(entity, ids.canvas));
+            canvas.visible = !canvas.visible;
         }
     }
 

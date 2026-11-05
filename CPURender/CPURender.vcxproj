@@ -154,6 +154,10 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClCompile Include="Systems.cpp" />
     <ClCompile Include="RenderSystem.cpp" />
     <ClCompile Include="HudSystem.cpp" />
+    <ClCompile Include="UISystem.cpp" />
+    <ClCompile Include="Noise.cpp" />
+    <ClCompile Include="Editor.cpp" />
+    <ClCompile Include="UI.cpp" />
     <ClCompile Include="Chapters\Chapter01.cpp" />
     <ClCompile Include="Chapters\Chapter03.cpp" />
     <ClCompile Include="Chapters\Chapter04.cpp" />
@@ -184,6 +188,9 @@ xcopy /Y /D /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Systems.h" />
+    <ClInclude Include="Noise.h" />
+    <ClInclude Include="Editor.h" />
+    <ClInclude Include="UI.h" />
     <ClInclude Include="Chapters\Chapters.h" />
   </ItemGroup>
   <ItemGroup>

@@ -25,3 +25,7 @@ extern std::array<float, WIDTH * HEIGHT> depthBuffer;
 
 // Writes one pixel into frameBuffer. A pixel outside the screen is logged and skipped.
 void add_pixel_to_buffer(Pixel px);
+
+// "Over" blending: lays a colour on top of what is already in the framebuffer at this index.
+// result = color * opacity + background * (1 - opacity)
+Color3 blend_over_framebuffer(const Color3& color, int index, float opacity);

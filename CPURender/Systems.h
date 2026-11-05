@@ -10,12 +10,12 @@
 // None of them knows a specific entity: what an entity does only depends on the components it has.
 //
 // main.cpp wraps these into ECS::System lambdas and adds them to the ECS, which runs them once per frame:
-//   spin -> orbit -> light sweep -> particles -> clear framebuffer -> render -> upload framebuffer -> hud -> present
+//   spin -> orbit -> light sweep -> particles -> clear framebuffer -> render -> ui images -> upload framebuffer -> ui text -> hud -> present
 // handle_key and update_window_title are not in that list: they run on an SDL event and once per second.
 
 namespace systems
 {
-    // Input (Systems.cpp). Keys T and P, and the keys of the LightToggleComponents.
+    // Input (Systems.cpp). Keys T, P and U, and the keys of the LightToggleComponents.
     void handle_key(EntityManager& em, const ComponentIDs& ids, SDL_Keycode key);
 
     // Simulation (Systems.cpp). seconds is the time since the start, deltaTime the time since the previous frame.
@@ -28,6 +28,11 @@ namespace systems
     // Drawing (RenderSystem.cpp): draws every entity into the framebuffer, seen from the first camera.
     // Writes the frame and depth buffers only, nothing reaches the screen yet.
     void render(EntityManager& em, const ComponentIDs& ids);
+
+    // UI (UISystem.cpp), in two steps because the elements don't reach the screen the same way:
+    // the images go into the framebuffer before it is uploaded, the texts go through SDL after.
+    void draw_ui_images(EntityManager& em, const ComponentIDs& ids);
+    void draw_ui_text(EntityManager& em, const ComponentIDs& ids, SDL_Renderer* renderer);
 
     // On-screen text (HudSystem.cpp): the state of the lights, the particles and the camera.
     // Unlike render it draws through SDL, on top of the framebuffer once it is uploaded.

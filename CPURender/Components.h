@@ -9,6 +9,7 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "Particle.h"
+#include "UI.h"
 #include "Vec3.h"
 
 // Components are plain data: what an entity IS. What it DOES lives in the systems (Systems.h).
@@ -29,6 +30,9 @@ struct ComponentIDs
 	int orbit = -1;
 	int lightSweep = -1;
 	int lightToggle = -1;
+	int canvas = -1;
+	int image = -1;
+	int text = -1;
 };
 
 
@@ -127,4 +131,26 @@ struct LightSweepComponent
 struct LightToggleComponent
 {
 	SDL_Keycode key = SDLK_UNKNOWN;
+};
+
+
+// ---- UI ----
+// An element belongs to a canvas by naming its entity, so hiding or moving the canvas affects all its elements.
+
+struct CanvasComponent
+{
+	Canvas canvas;
+	bool visible = true; // key U
+};
+
+struct ImageComponent
+{
+	int canvasEntity = -1;
+	Image image;
+};
+
+struct TextComponent
+{
+	int canvasEntity = -1;
+	Text text;
 };
