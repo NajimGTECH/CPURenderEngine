@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-bool texture::load_png(const std::string& path, Texture& outTexture)
+bool Texture::load_png(const std::string& path)
 {
     SDL_Surface* loaded = SDL_LoadPNG(path.c_str());
 
@@ -29,10 +29,10 @@ bool texture::load_png(const std::string& path, Texture& outTexture)
         return false;
     }
 
-    outTexture.width = surface->w;
-    outTexture.height = surface->h;
+    width = surface->w;
+    height = surface->h;
 
-    outTexture.texels.resize(
+    texels.resize(
         static_cast<size_t>(surface->w) * surface->h
     );
 
@@ -48,7 +48,7 @@ bool texture::load_png(const std::string& path, Texture& outTexture)
         {
             const uint32_t argb = row[x];
 
-            outTexture.texels[y * surface->w + x] = Color3{
+            texels[y * surface->w + x] = Color3{
                 static_cast<uint8_t>((argb >> 16) & 0xFF),
                 static_cast<uint8_t>((argb >> 8) & 0xFF),
                 static_cast<uint8_t>(argb & 0xFF),
@@ -61,11 +61,11 @@ bool texture::load_png(const std::string& path, Texture& outTexture)
     return true;
 }
 
-Color3 texture::sample(const Texture& texture, float u, float v)
+Color3 Texture::sample(float u, float v) const
 {
-    if (texture.width <= 0 ||
-        texture.height <= 0 ||
-        texture.texels.empty())
+    if (width <= 0 ||
+        height <= 0 ||
+        texels.empty())
     {
         return Color3{ 0, 0, 0, 255 };
     }
@@ -77,28 +77,25 @@ Color3 texture::sample(const Texture& texture, float u, float v)
     // OBJ coordinates have v = 0 at the bottom,
     // while image row 0 is at the top.
     const int x = std::clamp(
-        static_cast<int>(u * texture.width),
+        static_cast<int>(u * width),
         0,
-        texture.width - 1
+        width - 1
     );
 
     const int y = std::clamp(
-        static_cast<int>((1.0f - v) * texture.height),
+        static_cast<int>((1.0f - v) * height),
         0,
-        texture.height - 1
+        height - 1
     );
 
-    return texture.texels[y * texture.width + x];
+    return texels[y * width + x];
 }
 
-Color3 texture::sample_bilinear(
-    const Texture& texture,
-    float u,
-    float v)
+Color3 Texture::sample_bilinear(float u, float v) const
 {
-    if (texture.width <= 0 ||
-        texture.height <= 0 ||
-        texture.texels.empty())
+    if (width <= 0 ||
+        height <= 0 ||
+        texels.empty())
     {
         return Color3{ 0, 0, 0, 255 };
     }
@@ -111,8 +108,8 @@ Color3 texture::sample_bilinear(
 
     // Convert UV coordinates into texel space.
     // The half-texel offset aligns UV coordinates with texel centers.
-    const float x = u * texture.width - 0.5f;
-    const float y = (1.0f - v) * texture.height - 0.5f;
+    const float x = u * width - 0.5f;
+    const float y = (1.0f - v) * height - 0.5f;
 
     // x and y are at least -0.5: + 1 makes them positive, where a cast to int rounds down like floor.
     const int x0 = static_cast<int>(x + 1.0f) - 1;
@@ -123,17 +120,17 @@ Color3 texture::sample_bilinear(
 
     // Repeat texture coordinates at the image boundaries: x0 and y0 can only go one texel too far.
     // The tests also cover any other value, which a NaN coordinate would give: the texels stay in bounds.
-    const int x1 = (x0 < 0 || x0 >= texture.width) ? texture.width - 1 : x0;
-    const int x2 = (x0 < 0 || x0 >= texture.width - 1) ? 0 : x0 + 1;
+    const int x1 = (x0 < 0 || x0 >= width) ? width - 1 : x0;
+    const int x2 = (x0 < 0 || x0 >= width - 1) ? 0 : x0 + 1;
 
-    const int y1 = (y0 < 0 || y0 >= texture.height) ? texture.height - 1 : y0;
-    const int y2 = (y0 < 0 || y0 >= texture.height - 1) ? 0 : y0 + 1;
+    const int y1 = (y0 < 0 || y0 >= height) ? height - 1 : y0;
+    const int y2 = (y0 < 0 || y0 >= height - 1) ? 0 : y0 + 1;
 
     // Four neighbouring texels.
-    const Color3& c00 = texture.texels[y1 * texture.width + x1];
-    const Color3& c10 = texture.texels[y1 * texture.width + x2];
-    const Color3& c01 = texture.texels[y2 * texture.width + x1];
-    const Color3& c11 = texture.texels[y2 * texture.width + x2];
+    const Color3& c00 = texels[y1 * width + x1];
+    const Color3& c10 = texels[y1 * width + x2];
+    const Color3& c01 = texels[y2 * width + x1];
+    const Color3& c11 = texels[y2 * width + x2];
 
     // How much each texel counts: the closer the point is to it, the more. They add up to 1.
     const float weight00 = (1.0f - tx) * (1.0f - ty);

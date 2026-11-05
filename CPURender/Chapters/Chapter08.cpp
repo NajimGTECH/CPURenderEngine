@@ -191,14 +191,18 @@ void chapter_7_draw_triangle(
 }
 
 
-// What we keep of a vertex once it is projected on the screen.
-struct Chapter8ProjectedVertex
+// The anonymous namespace keeps it private to this chapter, like static does for a function.
+namespace
 {
-    int x = 0;          // Horizontal position on the screen.
-    int y = 0;          // Vertical position on the screen.
-    float depth = 0.0f; // Depth after projection.
-    bool visible = false; // True if the vertex is in front of the camera.
-};
+    // What we keep of a vertex once it is projected on the screen.
+    struct Chapter8ProjectedVertex
+    {
+        int x = 0;          // Horizontal position on the screen.
+        int y = 0;          // Vertical position on the screen.
+        float depth = 0.0f; // Depth after projection.
+        bool visible = false; // True if the vertex is in front of the camera.
+    };
+}
 
 // Solid render of a 3D model loaded from an OBJ file.
 // Backface culling throws away the triangles facing away

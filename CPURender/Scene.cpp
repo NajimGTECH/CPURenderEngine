@@ -11,10 +11,10 @@ constexpr size_t MAX_PARTICLES = 20000;
 bool scene::load_assets(Assets& outAssets)
 {
     // Load the mesh and its texture once, before the loop (chapters 6 and 9)
-    if (!mesh::load_obj("assets/spot.obj", outAssets.spot)) return false;
+    if (!outAssets.spot.load_obj("assets/spot.obj")) return false;
     std::cout << "Loaded spot.obj:\t" << outAssets.spot.vertices.size() << " vertices, " << outAssets.spot.uvs.size() << " uvs, " << outAssets.spot.faces.size() << " faces\n";
 
-    if (!texture::load_png("assets/spot_texture.png", outAssets.spotTexture)) return false;
+    if (!outAssets.spotTexture.load_png("assets/spot_texture.png")) return false;
     std::cout << "Loaded spot_texture.png:\t" << outAssets.spotTexture.width << "x" << outAssets.spotTexture.height << " texels\n";
 
     // Week 2: one material per cow in the shader demo
@@ -49,7 +49,7 @@ static ComponentIDs register_components(EntityManager& em)
 static void add_particles(EntityManager& em, const ComponentIDs& ids, int entity, ParticleComponent& particles)
 {
     em.add_component(entity, ids.particle, &particles);
-    particle::create(static_cast<ParticleComponent*>(em.get_component(entity, ids.particle))->system, MAX_PARTICLES);
+    static_cast<ParticleComponent*>(em.get_component(entity, ids.particle))->system.reserve(MAX_PARTICLES);
 }
 
 // Camera pulled back to see the 4 cows.

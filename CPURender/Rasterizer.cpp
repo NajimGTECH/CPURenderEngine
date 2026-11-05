@@ -8,16 +8,21 @@
 #include <span>
 #include <vector>
 
-// A projected vertex, like ShadedVertex, that also carries its world position for the shader.
-struct ShaderVertex
+// The structs only used in this file are in an anonymous namespace: like static for a function,
+// it keeps them private to Rasterizer.cpp, so no other file can see them or clash with their name.
+namespace
 {
-    int x = 0, y = 0;                   // screen position
-    float z = 0.0f;                     // NDC depth, for the depth test
-    float invW = 0.0f;                  // 1 / w, for perspective-correct interpolation
-    UV uv;                              // texture coordinate of this corner
-    math::Vector3<float> normal;        // world space normal
-    math::Vector3<float> worldPosition; // world space position (point lights, highlight)
-};
+    // A projected vertex, like ShadedVertex, that also carries its world position for the shader.
+    struct ShaderVertex
+    {
+        int x = 0, y = 0;                   // screen position
+        float z = 0.0f;                     // NDC depth, for the depth test
+        float invW = 0.0f;                  // 1 / w, for perspective-correct interpolation
+        UV uv;                              // texture coordinate of this corner
+        math::Vector3<float> normal;        // world space normal
+        math::Vector3<float> worldPosition; // world space position (point lights, highlight)
+    };
+}
 
 // The edge function: the 2D cross product of (B - A) and (P - A).
 // Sign = which side of edge A->B the point P is on.
@@ -40,19 +45,19 @@ BoundingBox rasterizer::bounding_box(const Pixel& a, const Pixel& b, const Pixel
 }
 
 // The largest min and the smallest max: if the rectangles don't overlap, min ends up past max.
-BoundingBox rasterizer::intersect(const BoundingBox& a, const BoundingBox& b)
+BoundingBox BoundingBox::intersect(const BoundingBox& other) const
 {
     return BoundingBox{
-        std::max(a.minX, b.minX),
-        std::max(a.minY, b.minY),
-        std::min(a.maxX, b.maxX),
-        std::min(a.maxY, b.maxY)
+        std::max(minX, other.minX),
+        std::max(minY, other.minY),
+        std::min(maxX, other.maxX),
+        std::min(maxY, other.maxY)
     };
 }
 
-bool rasterizer::is_empty(const BoundingBox& box)
+bool BoundingBox::is_empty() const
 {
-    return box.minX > box.maxX || box.minY > box.maxY;
+    return minX > maxX || minY > maxY;
 }
 
 // p * M with p = (x, y, z, 1), keeping w: multiply_point would already divide by w,
@@ -141,12 +146,15 @@ static bool is_top_left_edge(const Pixel& from, const Pixel& to)
 
 // The edge function A->B at the top left corner of a box, and how much it changes per pixel.
 // edge(x, y) = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
-struct EdgeWalker
+namespace
 {
-    int start = 0;
-    int stepX = 0; // one pixel to the right
-    int stepY = 0; // one pixel down
-};
+    struct EdgeWalker
+    {
+        int start = 0;
+        int stepX = 0; // one pixel to the right
+        int stepY = 0; // one pixel down
+    };
+}
 
 static EdgeWalker make_edge_walker(const Pixel& a, const Pixel& b, const BoundingBox& box)
 {
@@ -181,8 +189,8 @@ static void draw_triangle(ShaderVertex vA, ShaderVertex vB, ShaderVertex vC, con
     // Only the part of the triangle's box inside the region: on a tile, the other pixels belong to another thread.
     // The edge walkers below start from the corner of this smaller box, so the pixels that are drawn
     // get exactly the same values as if the whole triangle was drawn.
-    const BoundingBox box = rasterizer::intersect(rasterizer::bounding_box(pA, pB, pC), region);
-    if (rasterizer::is_empty(box)) return; // the triangle is entirely outside the region
+    const BoundingBox box = rasterizer::bounding_box(pA, pB, pC).intersect(region);
+    if (box.is_empty()) return; // the triangle is entirely outside the region
 
     const bool transparent = opacity < 1.0f;
 
@@ -340,7 +348,7 @@ BoundingBox rasterizer::screen_box(const Mesh& mesh, const math::Mat4<float>& mo
     }
 
     // Clamped to the screen: a mesh entirely off screen ends up empty
-    return intersect(box, screen);
+    return box.intersect(screen);
 }
 
 // Draws a mesh placed in the world by its model matrix, with a material.
@@ -457,7 +465,7 @@ void rasterizer::draw_particles(const ParticleSystem& system, const math::Mat4<f
         if (particle.blend == ParticleBlend::Intensity)
         {
             // Fades out with age. Squared, so it stays bright most of its life and dies off quickly at the end.
-            float fade = particle::life_left(particle);
+            float fade = particle.life_left();
             fade *= fade;
 
             // Like the transparent cows: test the depth, don't write it,

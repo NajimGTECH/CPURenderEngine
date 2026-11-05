@@ -107,7 +107,7 @@ void systems::particle_system(EntityManager& em, const ComponentIDs& ids, float 
         // The emitter sits on its entity, wherever it is
         particles.emitter.position = transform.transformMatrix.extract_position();
 
-        if (particles.emitting) particle::emit(particles.emitter, particles.system, deltaTime);
-        particle::update(particles.system, deltaTime);
+        if (particles.emitting) particles.emitter.emit(particles.system, deltaTime);
+        particles.system.update(deltaTime);
     }
 }

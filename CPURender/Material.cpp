@@ -67,7 +67,7 @@ bool material::load_mtl(const std::string& path, std::vector<Material>& outMater
         else if (type == "map_Kd")
         {
             std::string fileName;
-            if (stream >> fileName && !texture::load_png(folder + fileName, material.diffuseMap)) return false;
+            if (stream >> fileName && !material.diffuseMap.load_png(folder + fileName)) return false;
         }
         // Any other line type (#comments, Ke, Ni, map_Bump, ...) is ignored
     }
@@ -75,12 +75,12 @@ bool material::load_mtl(const std::string& path, std::vector<Material>& outMater
     return true;
 }
 
-bool material::has_texture(const Material& material)
+bool Material::has_texture() const
 {
-    return !material.diffuseMap.texels.empty();
+    return !diffuseMap.texels.empty();
 }
 
-bool material::is_transparent(const Material& material)
+bool Material::is_transparent() const
 {
-    return material.opacity < 1.0f;
+    return opacity < 1.0f;
 }

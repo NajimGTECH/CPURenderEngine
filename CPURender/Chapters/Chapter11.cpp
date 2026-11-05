@@ -97,7 +97,7 @@ void chapter_11_draw_triangle_phong(ShadedVertex vA, ShadedVertex vB, ShadedVert
             depthBuffer[index] = z;
 
             // texel * diffuse, plus a white highlight on top
-            Color3 texel = bilinear ? texture::sample_bilinear(meshTexture, u, v) : texture::sample(meshTexture, u, v);
+            Color3 texel = bilinear ? meshTexture.sample_bilinear(u, v) : meshTexture.sample(u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness + 255.0f * specular), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness + 255.0f * specular), 0, 255));
             texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness + 255.0f * specular), 0, 255));

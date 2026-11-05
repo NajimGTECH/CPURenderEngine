@@ -15,26 +15,30 @@
 // The screen is drawn in tiles, one per thread (Tiles.h). The entities are read first, on the main thread,
 // into a RenderList of plain data; then every tile draws that list. The threads never touch the EntityManager.
 
-// Everything needed to draw one mesh entity.
-struct Drawable
+// The anonymous namespace keeps these structs private to RenderSystem.cpp, like static does for a function.
+namespace
 {
-    math::Mat4<float> model;
-    const Mesh* mesh = nullptr;
-    const Material* material = nullptr;
-    float opacity = 1.0f;
-    float distanceToCamera = 0.0f; // squared, only used to sort
-    BoundingBox screenBox;         // the pixels the mesh can cover, to skip the tiles it doesn't touch
-};
+    // Everything needed to draw one mesh entity.
+    struct Drawable
+    {
+        math::Mat4<float> model;
+        const Mesh* mesh = nullptr;
+        const Material* material = nullptr;
+        float opacity = 1.0f;
+        float distanceToCamera = 0.0f; // squared, only used to sort
+        BoundingBox screenBox;         // the pixels the mesh can cover, to skip the tiles it doesn't touch
+    };
 
-// Everything a tile needs to draw the frame. Filled once per frame, then only read by the threads.
-struct RenderList
-{
-    math::Mat4<float> viewProjection;
-    math::Vector3<float> cameraPosition;
-    std::vector<Light> lights;
-    std::vector<Drawable> drawables; // opaque first, then transparent from back to front
-    std::vector<const ParticleSystem*> particleSystems;
-};
+    // Everything a tile needs to draw the frame. Filled once per frame, then only read by the threads.
+    struct RenderList
+    {
+        math::Mat4<float> viewProjection;
+        math::Vector3<float> cameraPosition;
+        std::vector<Light> lights;
+        std::vector<Drawable> drawables; // opaque first, then transparent from back to front
+        std::vector<const ParticleSystem*> particleSystems;
+    };
+}
 
 static math::Mat4<float> compute_view_projection(const math::Vector3<float>& cameraPosition, const CameraComponent& camera)
 {
@@ -121,7 +125,7 @@ static std::vector<const ParticleSystem*> gather_particle_systems(EntityManager&
 // A mesh whose screen box doesn't overlap the tile can't write any of its pixels: the tile skips it.
 static bool touches(const Drawable& drawable, const BoundingBox& tile)
 {
-    return !rasterizer::is_empty(rasterizer::intersect(drawable.screenBox, tile));
+    return !drawable.screenBox.intersect(tile).is_empty();
 }
 
 // The three passes, restricted to the pixels of one tile. Every tile runs them in the same order,

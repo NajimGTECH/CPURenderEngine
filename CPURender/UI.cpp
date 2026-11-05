@@ -28,7 +28,7 @@ void ui::draw_image(const Image& image, const Canvas& canvas)
             const float u = (static_cast<float>(x - left) + 0.5f) / static_cast<float>(image.width);
             const float v = 1.0f - (static_cast<float>(y - top) + 0.5f) / static_cast<float>(image.height);
 
-            const Color3 texel = texture::sample(*image.texture, u, v);
+            const Color3 texel = image.texture->sample(u, v);
             const float opacity = image.opacity * static_cast<float>(texel.a) / 255.0f;
 
             add_pixel_to_buffer(Pixel{ x, y, blend_over_framebuffer(texel, y * WIDTH + x, opacity) });

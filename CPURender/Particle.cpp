@@ -59,23 +59,23 @@ static void apply_bounds(Particle& particle, const ParticlePhysics& physics)
     }
 }
 
-void particle::create(ParticleSystem& system, size_t maxCount)
+void ParticleSystem::reserve(size_t capacity)
 {
     // Reserve the whole pool once: spawning a particle never allocates memory during the game
-    system.particles.clear();
-    system.particles.reserve(maxCount);
-    system.maxCount = maxCount;
+    particles.clear();
+    particles.reserve(capacity);
+    maxCount = capacity;
 }
 
-void particle::emit(ParticleEmitter& emitter, ParticleSystem& system, float deltaTime)
+void ParticleEmitter::emit(ParticleSystem& system, float deltaTime)
 {
-    if (emitter.rate <= 0.0f) return;
+    if (rate <= 0.0f) return;
 
     // At 100 particles per second and 60 FPS, a frame owes 1.67 particles:
     // spawn 1 now and keep the 0.67 for the next frame, so the rate stays exact.
-    emitter.accumulator += emitter.rate * deltaTime;
-    int count = static_cast<int>(emitter.accumulator);
-    emitter.accumulator -= static_cast<float>(count);
+    accumulator += rate * deltaTime;
+    int count = static_cast<int>(accumulator);
+    accumulator -= static_cast<float>(count);
 
     // A full pool simply drops the new particles
     while (count-- > 0 && system.particles.size() < system.maxCount)
@@ -83,29 +83,26 @@ void particle::emit(ParticleEmitter& emitter, ParticleSystem& system, float delt
         Particle particle;
 
         // Somewhere in a small cube around the emitter
-        particle.position = emitter.position + random_signed_vector(emitter.seed) * emitter.spawnRadius;
+        particle.position = position + random_signed_vector(seed) * spawnRadius;
 
         // The emitter direction, bent at random by the spread, thrown at a random speed
-        const float speed = emitter.speedMin + (emitter.speedMax - emitter.speedMin) * random01(emitter.seed);
-        particle.velocity = (emitter.direction + random_signed_vector(emitter.seed) * emitter.spread) * speed;
+        const float speed = speedMin + (speedMax - speedMin) * random01(seed);
+        particle.velocity = (direction + random_signed_vector(seed) * spread) * speed;
 
-        particle.duration = emitter.durationMin + (emitter.durationMax - emitter.durationMin) * random01(emitter.seed);
+        particle.duration = durationMin + (durationMax - durationMin) * random01(seed);
 
         // A colour between the two bounds, a bit darker or brighter so the cloud doesn't look flat
-        const float colorRatio = random01(emitter.seed);
-        const float intensity = 0.8f + 0.2f * random01(emitter.seed);
-        particle.color = math::Vector3<float>::lerp(emitter.colorMin, emitter.colorMax, colorRatio) * intensity;
+        const float colorRatio = random01(seed);
+        const float intensity = 0.8f + 0.2f * random01(seed);
+        particle.color = math::Vector3<float>::lerp(colorMin, colorMax, colorRatio) * intensity;
 
-        particle.blend = emitter.blend;
+        particle.blend = blend;
         system.particles.push_back(particle);
     }
 }
 
-void particle::update(ParticleSystem& system, float deltaTime)
+void ParticleSystem::update(float deltaTime)
 {
-    const ParticlePhysics& physics = system.physics;
-    std::vector<Particle>& particles = system.particles;
-
     // Age: a dead particle is replaced by the last one of the list, then the list shrinks by one.
     // Nothing has to be shifted, but the order changes: that's fine, it doesn't mean anything here.
     size_t i = 0;
@@ -145,7 +142,7 @@ void particle::update(ParticleSystem& system, float deltaTime)
     }
 }
 
-float particle::life_left(const Particle& particle)
+float Particle::life_left() const
 {
-    return 1.0f - particle.age / particle.duration;
+    return 1.0f - age / duration;
 }

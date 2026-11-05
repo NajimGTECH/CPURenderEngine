@@ -74,20 +74,20 @@ static std::vector<math::Vector3<float>> compute_vertex_normals(const Mesh& mesh
     return normals;
 }
 
-void mesh::compute_normals(Mesh& outMesh)
+void Mesh::compute_normals()
 {
-    outMesh.faceNormals = compute_face_normals(outMesh);
-    outMesh.vertexNormals = compute_vertex_normals(outMesh, outMesh.faceNormals);
+    faceNormals = compute_face_normals(*this);
+    vertexNormals = compute_vertex_normals(*this, faceNormals);
 }
 
-bool mesh::load_obj(const std::string& path, Mesh& outMesh)
+bool Mesh::load_obj(const std::string& path)
 {
     std::ifstream file(path);
     if (!file.is_open()) { SDL_Log("Could not open %s", path.c_str()); return false; }
 
-    outMesh.vertices.clear();
-    outMesh.uvs.clear();
-    outMesh.faces.clear();
+    vertices.clear();
+    uvs.clear();
+    faces.clear();
 
     std::string line;
     while (std::getline(file, line))
@@ -102,7 +102,7 @@ bool mesh::load_obj(const std::string& path, Mesh& outMesh)
             math::Vector3<float> vertex;
             if (stream >> vertex.x >> vertex.y >> vertex.z)
             {
-                outMesh.vertices.push_back(vertex);
+                vertices.push_back(vertex);
             }
         }
         else if (type == "vt")
@@ -111,7 +111,7 @@ bool mesh::load_obj(const std::string& path, Mesh& outMesh)
             UV uv;
             if (stream >> uv.u >> uv.v)
             {
-                outMesh.uvs.push_back(uv);
+                uvs.push_back(uv);
             }
         }
         else if (type == "f")
@@ -130,16 +130,16 @@ bool mesh::load_obj(const std::string& path, Mesh& outMesh)
                 face.a--; face.b--; face.c--;
                 face.uvA--; face.uvB--; face.uvC--;
 
-                outMesh.faces.push_back(face);
+                faces.push_back(face);
             }
         }
         // Any other line type (vn, #comments, ...) is ignored
     }
 
     // Make sure every face points to an existing vertex (and UV, or -1), so the renderer can't read out of bounds
-    const int vertexCount = static_cast<int>(outMesh.vertices.size());
-    const int uvCount = static_cast<int>(outMesh.uvs.size());
-    for (const Face& face : outMesh.faces)
+    const int vertexCount = static_cast<int>(vertices.size());
+    const int uvCount = static_cast<int>(uvs.size());
+    for (const Face& face : faces)
     {
         if (face.a < 0 || face.a >= vertexCount
             || face.b < 0 || face.b >= vertexCount
@@ -159,7 +159,7 @@ bool mesh::load_obj(const std::string& path, Mesh& outMesh)
     }
 
     // Only once every index is known to be valid
-    compute_normals(outMesh);
+    compute_normals();
 
     return true;
 }

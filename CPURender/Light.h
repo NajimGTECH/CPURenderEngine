@@ -28,12 +28,9 @@ struct Light
     // Full light inside the inner cone, no light outside the outer one, a smooth ramp in between.
     float innerConeCos = 0.95f;
     float outerConeCos = 0.90f;
-};
 
-namespace light
-{
     // Light arriving at a surface point.
     // outToLight receives the unit direction from the point towards the light.
     // Returns the light colour scaled by how much of it reaches the point (distance falloff, spot cone).
-    math::Vector3<float> incoming(const Light& light, const math::Vector3<float>& position, math::Vector3<float>& outToLight);
-}
+    math::Vector3<float> incoming(const math::Vector3<float>& point, math::Vector3<float>& outToLight) const;
+};

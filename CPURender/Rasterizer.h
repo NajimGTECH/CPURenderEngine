@@ -34,6 +34,12 @@ struct BoundingBox
 {
     int minX = 0, minY = 0;
     int maxX = 0, maxY = 0;
+
+    // The pixels that are in both rectangles. Empty if they don't overlap.
+    BoundingBox intersect(const BoundingBox& other) const;
+
+    // True if the rectangle has no pixel at all.
+    bool is_empty() const;
 };
 
 namespace rasterizer
@@ -43,12 +49,6 @@ namespace rasterizer
 
     // The smallest rectangle around a triangle, clamped to the screen (chapter 3).
     BoundingBox bounding_box(const Pixel& a, const Pixel& b, const Pixel& c);
-
-    // The pixels that are in both rectangles. Empty if they don't overlap.
-    BoundingBox intersect(const BoundingBox& a, const BoundingBox& b);
-
-    // True if the rectangle has no pixel at all.
-    bool is_empty(const BoundingBox& box);
 
     // The rectangle of the screen a mesh can cover once placed by its model matrix. Empty if it is off screen.
     BoundingBox screen_box(const Mesh& mesh, const math::Mat4<float>& model, const math::Mat4<float>& viewProjection);

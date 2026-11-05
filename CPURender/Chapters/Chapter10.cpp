@@ -76,7 +76,7 @@ void chapter_10_draw_triangle_lit(TexturedVertex vA, TexturedVertex vB, Textured
             depthBuffer[index] = z;
 
             // Sample the texture, then darken its three RGB channels.
-            Color3 texel = texture::sample(meshTexture, u, v);
+            Color3 texel = meshTexture.sample(u, v);
             texel.r = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.r * brightness), 0, 255));
             texel.g = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.g * brightness), 0, 255));
             texel.b = static_cast<uint8_t>(std::clamp(static_cast<int>(texel.b * brightness), 0, 255));

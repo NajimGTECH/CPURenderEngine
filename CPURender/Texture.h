@@ -15,16 +15,13 @@ struct Texture
 
     // width * height texels; row 0 is the TOP of the image.
     std::vector<Color3> texels;
-};
 
-namespace texture
-{
-    // Loads a PNG file (decoded by SDL). Returns false if the file can't be read.
-    bool load_png(const std::string& path, Texture& outTexture);
+    // Loads a PNG file (decoded by SDL) into this texture. Returns false if the file can't be read.
+    bool load_png(const std::string& path);
 
     // Nearest-neighbour sampling.
-    Color3 sample(const Texture& texture, float u, float v);
+    Color3 sample(float u, float v) const;
 
     // Bilinear filtering: blends the four nearest texels.
-    Color3 sample_bilinear(const Texture& texture, float u, float v);
-}
+    Color3 sample_bilinear(float u, float v) const;
+};

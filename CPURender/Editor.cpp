@@ -10,12 +10,16 @@
 constexpr float DETAIL_FREQUENCY = 96.0f;
 constexpr float DETAIL_STRENGTH = 0.15f;
 
-// A colour of the height ramp: at this height (in [0, 1]) the ground has exactly this colour.
-struct ColorStop
+// The anonymous namespace keeps it private to Editor.cpp, like static does for a function.
+namespace
 {
-    float height = 0.0f;
-    math::Vector3<float> color;
-};
+    // A colour of the height ramp: at this height (in [0, 1]) the ground has exactly this colour.
+    struct ColorStop
+    {
+        float height = 0.0f;
+        math::Vector3<float> color;
+    };
+}
 
 // The height of the ground, as a fraction of settings.height, in [0, 1].
 // gridX and gridZ are the position on the terrain, both in [0, 1].
@@ -110,7 +114,7 @@ void editor::generate_terrain_mesh(const TerrainSettings& settings, Mesh& outMes
         }
     }
 
-    mesh::compute_normals(outMesh);
+    outMesh.compute_normals();
 }
 
 void editor::generate_terrain_texture(const TerrainSettings& settings, Texture& outTexture)

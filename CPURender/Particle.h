@@ -27,6 +27,9 @@ struct Particle
 
     math::Vector3<float> color{ 1.0f, 1.0f, 1.0f }; // (x, y, z) = (r, g, b) in [0, 1]
     ParticleBlend blend = ParticleBlend::Intensity;
+
+    // 1 when the particle is born, 0 when it dies: Intensity particles fade out with it.
+    float life_left() const;
 };
 
 // The forces shared by every particle of a system.
@@ -51,6 +54,12 @@ struct ParticleSystem
     std::vector<Particle> particles;
     size_t maxCount = 0;
     ParticlePhysics physics;
+
+    // Empties the pool and reserves room for capacity particles.
+    void reserve(size_t capacity);
+
+    // Ages every particle, removes the dead ones, then moves the others (gravity, drag, bounds).
+    void update(float deltaTime);
 };
 
 // Spawns new particles around a point. The particles don't belong to it:
@@ -80,18 +89,7 @@ struct ParticleEmitter
 
     float accumulator = 0.0f;                          // fraction of a particle left over from the previous frames
     uint32_t seed = 1;                                 // state of the random generator, give each emitter its own
+
+    // Spawns into system the particles this emitter owes for the last deltaTime seconds (as long as the pool has room).
+    void emit(ParticleSystem& system, float deltaTime);
 };
-
-namespace particle
-{
-    void create(ParticleSystem& system, size_t maxCount);
-
-    // Spawns the particles this emitter owes for the last deltaTime seconds (as long as the pool has room).
-    void emit(ParticleEmitter& emitter, ParticleSystem& system, float deltaTime);
-
-    // Ages every particle, removes the dead ones, then moves the others (gravity, drag, bounds).
-    void update(ParticleSystem& system, float deltaTime);
-
-    // 1 when the particle is born, 0 when it dies: Intensity particles fade out with it.
-    float life_left(const Particle& particle);
-}

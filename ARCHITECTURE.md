@@ -193,7 +193,7 @@ Because of the two steps, a text is always on top of every image, whatever the o
 | `Rasterizer.h/.cpp` | Clipping, triangle fill, depth test, transparency, particle drawing |
 | `Tiles.h/.cpp` | The grid of tiles, the threads that draw them, and the `MULTITHREADING` switch |
 | `Shader.h/.cpp` | The colour of one pixel (unlit, Lambert, Blinn-Phong) |
-| `Light`, `Material`, `Mesh`, `Texture`, `Particle` | The data and the logic of each concept, independent of the ECS |
+| `Light`, `Material`, `Mesh`, `Texture`, `Particle` | The data of each concept and its methods, independent of the ECS |
 | `Editor.h/.cpp` | Terrain generation: the mesh and the texture |
 | `Noise.h/.cpp` | Perlin and fractal noise |
 | `UI.h/.cpp` | Canvas, Image and Text, and how to draw them |
@@ -282,7 +282,10 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 - **Matrices**: row vectors, `p' = p * M`, so `A * B` applies A first. A full transform is `model * view * projection`. The details are at the top of `Mat4.h`.
 - **Screen**: the origin is at the top left, y goes down.
 - **Colours**: `Vector3` in [0, 1] for math (materials, lights, particles), `Color3` in 8 bits for pixels (textures, framebuffer).
-- **Naming**: modules are free functions in a lowercase namespace (`mesh::load_obj`, `systems::render`), components are `XComponent`, and helpers private to a `.cpp` file are `static`.
+- **Methods or free functions**: a function that works on one struct is a method of it (`texture.sample_bilinear(u, v)`, `mesh.load_obj(path)`, `box.intersect(tile)`). The structs stay plain data with public fields: the methods only save passing the struct around.
+- **Modules**: the code that doesn't belong to one struct is free functions in a lowercase namespace (`rasterizer::draw_mesh`, `systems::render`, `noise::perlin`). They are not turned into classes, which would have no data of their own and would only be namespaces with another name. That's also why a mesh doesn't draw itself: the code that writes pixels stays in the rasterizer and the UI, away from the data. `material::load_mtl` stays free too, because one file creates several materials.
+- **Private to a `.cpp` file**: helper functions are `static`, and structs are in an anonymous namespace (`ShaderVertex`, `Drawable`...). Both mean the same thing: nothing outside the file can see them. Nesting such a struct in a class would put it in a header, where every file including it would see it.
+- **Naming**: functions and methods are snake_case, components are `XComponent`.
 
 ## Good to know
 
@@ -295,7 +298,7 @@ In the drawing system (`main.cpp`), uncomment the chapter's call and comment out
 - **Transparency is approximate**: meshes and faces are sorted from back to front (painter's algorithm), which can fail on faces that intersect.
 - **Generating the terrain doesn't cost any FPS**: it takes about 145 ms, once, before the loop. After that it costs what any mesh costs to draw.
 - **The terrain is the slowest thing in the frame**: it covers about half of the screen, and the cost is per pixel, so its size on screen matters much more than its number of triangles. Measured in Release, on one thread, without the particles and the UI: 15 ms for the terrain and 11 ms for the cows. Going from 96 to 64 vertices per side only saves about 1 ms.
-- **The per-pixel code is written for speed**: `draw_triangle` updates its edge functions with additions instead of computing them for each pixel, and `texture::sample_bilinear` avoids `std::floor` and `std::round`, which alone took a frame from 49 ms to 28 ms.
+- **The per-pixel code is written for speed**: `draw_triangle` updates its edge functions with additions instead of computing them for each pixel, and `Texture::sample_bilinear` avoids `std::floor` and `std::round`, which alone took a frame from 49 ms to 28 ms.
 - **Multithreading: the threads share nothing they write.** The screen is cut into one tile per hardware thread (4 x 2 tiles with 8 threads), and every thread draws the whole scene but only writes the pixels of its own tile. No two threads ever write the same pixel or depth value, so there is no lock. Everything else (meshes, materials, textures, lights, particles) is only read while the threads run.
 - **The threads never touch the ECS**: `render` reads the entities on the main thread first, into a `RenderList` of plain data, and only then starts the threads. The rasterizer only gets a rectangle of pixels (`region`) to stay inside, it doesn't know about threads either.
 - **The image is exactly the same with and without threads**, checked byte for byte, opaque and transparent: inside a tile everything is drawn in the same order, and the edge functions give a pixel the same value whatever box the loop starts from.

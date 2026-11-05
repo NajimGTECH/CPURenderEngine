@@ -75,7 +75,7 @@ void chapter_9_draw_triangle_textured(TexturedVertex vA, TexturedVertex vB, Text
             }
 
             depthBuffer[index] = z;
-            add_pixel_to_buffer(Pixel{ x, y, texture::sample(meshTexture, u, v) });
+            add_pixel_to_buffer(Pixel{ x, y, meshTexture.sample(u, v) });
         }
     }
 }

@@ -22,9 +22,9 @@ Color3 shader::shade(const Fragment& fragment, const Material& material,
 {
     // Base colour of the surface: the material colour, tinted by its texture if it has one
     math::Vector3<float> albedo = material.diffuse;
-    if (material::has_texture(material))
+    if (material.has_texture())
     {
-        const Color3 texel = texture::sample_bilinear(material.diffuseMap, fragment.uv.u, fragment.uv.v);
+        const Color3 texel = material.diffuseMap.sample_bilinear(fragment.uv.u, fragment.uv.v);
         const math::Vector3<float> texelColor(texel.r / 255.0f, texel.g / 255.0f, texel.b / 255.0f);
         albedo = math::Vector3<float>::scale(albedo, texelColor);
     }
@@ -43,7 +43,7 @@ Color3 shader::shade(const Fragment& fragment, const Material& material,
     for (const Light& light : lights)
     {
         math::Vector3<float> toLight;
-        const math::Vector3<float> received = light::incoming(light, fragment.position, toLight);
+        const math::Vector3<float> received = light.incoming(fragment.position, toLight);
 
         // Diffuse (Lambert): the more the surface faces the light, the more light it gets
         const float diffuse = std::max(0.0f, fragment.normal.dot(toLight));

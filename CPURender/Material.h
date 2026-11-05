@@ -31,16 +31,17 @@ struct Material
     ShadingModel shading = ShadingModel::Lambert;     // illum
 
     Texture diffuseMap;                               // map_Kd, empty if the material has no texture
+
+    bool has_texture() const;
+
+    // A transparent material must be drawn in the transparent pass, after the opaque ones.
+    bool is_transparent() const;
 };
 
+// Not a method of Material: one .mtl file creates several materials, so it doesn't belong to one of them.
 namespace material
 {
     // Minimal Wavefront MTL loader: reads newmtl, Ka, Kd, Ks, Ns, d, illum and map_Kd, ignores the rest.
     // Texture paths are relative to the .mtl file. Returns false if a file can't be read.
     bool load_mtl(const std::string& path, std::vector<Material>& outMaterials);
-
-    bool has_texture(const Material& material);
-
-    // A transparent material must be drawn in the transparent pass, after the opaque ones.
-    bool is_transparent(const Material& material);
 }
